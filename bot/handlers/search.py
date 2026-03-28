@@ -10,6 +10,9 @@ Fix #6:  Non-premium users see payment psychology hints during search.
 Fix #7:  Poll timeout adapts to queue health stats.
 Fix #8:  Watchdog re-queues stuck users (runs in retention_engine background task).
 Fix #10: /next carries warm-start context to boost next match quality.
+
+# UPDATED: all user-facing strings use t() with the user's ui_language.
+          Partner notifications look up the partner's language individually.
 """
 from __future__ import annotations
 
@@ -24,6 +27,7 @@ from aiogram.types import CallbackQuery, Message
 from bot.config import settings
 from bot.database import mongodb as db
 from bot.database import redis_client as redis
+from bot.i18n import lang_of, t
 from bot.keyboards.inline import next_keyboard, search_keyboard, stop_keyboard
 from bot.services import anti_abuse, experience, fallback, matchmaking, session
 from bot.services.analytics import track_match_attempt
@@ -32,12 +36,6 @@ from bot.services.retention_engine import apply_warm_start_boost
 from bot.utils.states import UserState
 
 router = Router()
-
-# Fix #6: Payment psychology hint shown while searching (for non-premium users)
-_PREMIUM_HINT = (
-    "\n\n💡 <b>Tip:</b> 🔥 VIP users get faster matches — "
-    "use /pay to unlock priority access."
-)
 
 
 # ─── /search ──────────────────────────────────────────────────────────────────
@@ -53,13 +51,13 @@ async def _do_search(
 
     # Abuse cooldown check
     if await anti_abuse.is_blocked(user_id):
-        await message.answer(
-            "⚠️ You've been temporarily restricted due to policy violations. "
-            "Please wait a few minutes before searching again."
-        )
+        user = await db.get_user(user_id)
+        lang = lang_of(user)
+        await message.answer(t("abuse_blocked", lang))
         return
 
     user = await db.get_or_create_user(user_id)
+    lang = lang_of(user)
 
     # Consult experience engine to decide action
     action = experience.decide_next_action(user)
@@ -67,8 +65,8 @@ async def _do_search(
     if action == "FALLBACK":
         await state.set_state(UserState.CONNECTED)
         await message.answer(
-            "✅ Found a stranger! Say hello 👋",
-            reply_markup=next_keyboard(),
+            t("found_stranger", lang),
+            reply_markup=next_keyboard(lang),
         )
         fallback.launch_fallback(bot, user_id)
         return
@@ -83,11 +81,15 @@ async def _do_search(
     await state.set_state(UserState.SEARCHING)
 
     # Fix #6: Show payment psychology hint to non-premium users
-    search_text = "🔍 Searching for a stranger..."
+    search_text = t("search_text", lang)
     if not user.get("is_premium") and not user.get("is_vip"):
-        search_text += _PREMIUM_HINT
+        search_text += t("premium_hint", lang)
 
-    await message.answer(search_text, reply_markup=stop_keyboard(), parse_mode="HTML")
+    await message.answer(
+        search_text,
+        reply_markup=stop_keyboard(lang),
+        parse_mode="HTML",
+    )
 
     # Fix #7: Adapt poll timeout based on queue health
     try:
@@ -133,19 +135,21 @@ async def _do_search(
         await redis.add_recent_match(user_id, partner_id)
         await redis.add_recent_match(partner_id, user_id)
 
-        # Notify both
+        # Notify both — each in their own language
         wait_time = time.time() - search_start
         await state.set_state(UserState.CONNECTED)
 
         await message.answer(
-            "✅ Connected! Say hello to your stranger 👋",
-            reply_markup=next_keyboard(),
+            t("connected_stranger", lang),
+            reply_markup=next_keyboard(lang),
         )
         try:
+            partner = await db.get_user(partner_id)
+            partner_lang = lang_of(partner)
             await bot.send_message(
                 partner_id,
-                "✅ Connected! Say hello to your stranger 👋",
-                reply_markup=next_keyboard(),
+                t("connected_stranger", partner_lang),
+                reply_markup=next_keyboard(partner_lang),
             )
         except Exception:
             pass
@@ -156,8 +160,8 @@ async def _do_search(
         await matchmaking.dequeue_user(user_id)
         await state.set_state(UserState.CONNECTED)
         await message.answer(
-            "✅ Found a stranger! Say hello 👋",
-            reply_markup=next_keyboard(),
+            t("found_stranger", lang),
+            reply_markup=next_keyboard(lang),
         )
         fallback.launch_fallback(bot, user_id)
         track_match_attempt(user_id, success=False, wait_time=max_wait)
@@ -167,10 +171,14 @@ async def _do_search(
 async def cmd_search(message: Message, state: FSMContext, bot: Bot) -> None:
     current = await state.get_state()
     if current == UserState.SEARCHING:
-        await message.answer("⏳ Already searching! Use /stop to cancel.")
+        user = await db.get_user(message.from_user.id)  # type: ignore[union-attr]
+        lang = lang_of(user)
+        await message.answer(t("already_searching", lang))
         return
     if current == UserState.CONNECTED:
-        await message.answer("💬 You're already in a chat. Use /next or /stop first.")
+        user = await db.get_user(message.from_user.id)  # type: ignore[union-attr]
+        lang = lang_of(user)
+        await message.answer(t("already_in_chat", lang))
         return
     await _do_search(message, state, bot)
 
@@ -194,13 +202,15 @@ async def _do_next(message: Message, state: FSMContext, bot: Bot) -> None:
     # End current session — Feature 4: pass bot for exit experience message
     await session.end_session(user_id, exit_reason="next", bot=bot)
 
-    # Notify partner
+    # Notify partner in their language
     if partner_id and partner_id > 0:
         try:
+            partner = await db.get_user(partner_id)
+            partner_lang = lang_of(partner)
             await bot.send_message(
                 partner_id,
-                "Your partner has left the chat. Use /search to find a new stranger.",
-                reply_markup=search_keyboard(),
+                t("partner_left_next", partner_lang),
+                reply_markup=search_keyboard(partner_lang),
             )
         except Exception:
             pass
@@ -213,7 +223,9 @@ async def _do_next(message: Message, state: FSMContext, bot: Bot) -> None:
 async def cmd_next(message: Message, state: FSMContext, bot: Bot) -> None:
     current = await state.get_state()
     if current not in (UserState.CONNECTED, UserState.SEARCHING):
-        await message.answer("You're not in a chat. Use /search to start.")
+        user = await db.get_user(message.from_user.id)  # type: ignore[union-attr]
+        lang = lang_of(user)
+        await message.answer(t("not_in_chat", lang))
         return
     await _do_next(message, state, bot)
 
@@ -236,17 +248,21 @@ async def _do_stop(message: Message, state: FSMContext, bot: Bot) -> None:
     await matchmaking.dequeue_user(user_id)
     await state.set_state(UserState.IDLE)
 
+    user = await db.get_user(user_id)
+    lang = lang_of(user)
     await message.answer(
-        "🛑 Chat ended. Use /search whenever you're ready.",
-        reply_markup=search_keyboard(),
+        t("chat_ended", lang),
+        reply_markup=search_keyboard(lang),
     )
 
     if partner_id and partner_id > 0:
         try:
+            partner = await db.get_user(partner_id)
+            partner_lang = lang_of(partner)
             await bot.send_message(
                 partner_id,
-                "Your partner has left. Use /search to find a new stranger.",
-                reply_markup=search_keyboard(),
+                t("partner_left_stop", partner_lang),
+                reply_markup=search_keyboard(partner_lang),
             )
         except Exception:
             pass
@@ -256,7 +272,9 @@ async def _do_stop(message: Message, state: FSMContext, bot: Bot) -> None:
 async def cmd_stop(message: Message, state: FSMContext, bot: Bot) -> None:
     current = await state.get_state()
     if current == UserState.IDLE:
-        await message.answer("You're not in a chat.")
+        user = await db.get_user(message.from_user.id)  # type: ignore[union-attr]
+        lang = lang_of(user)
+        await message.answer(t("not_in_chat_stop", lang))
         return
     await _do_stop(message, state, bot)
 

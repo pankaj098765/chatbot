@@ -117,10 +117,24 @@ async def clear_session(user_id: int) -> None:
     pipe = _r().pipeline()
     pipe.delete(f"session:{user_id}")
     pipe.delete(f"session_id:{user_id}")
+    pipe.delete(f"session:tone:{user_id}")
     if partner_id:
         pipe.delete(f"session:{partner_id}")
         pipe.delete(f"session_id:{partner_id}")
+        pipe.delete(f"session:tone:{partner_id}")
     await pipe.execute()
+
+
+# ─── Session tone ─────────────────────────────────────────────────────────────
+
+async def set_session_tone(user_id: int, tone: str) -> None:
+    """Store the tone for user_id's current session."""
+    await _r().set(f"session:tone:{user_id}", tone)
+
+
+async def get_session_tone(user_id: int) -> str | None:
+    """Return the tone stored for user_id's current session, or None."""
+    return await _r().get(f"session:tone:{user_id}")
 
 
 # ─── Session message counter ─────────────────────────────────────────────────
@@ -319,3 +333,25 @@ async def get_gender_queue_stats() -> tuple[int, int]:
     male = int(results[0]) if results[0] else 0
     female = int(results[1]) if results[1] else 0
     return male, female
+
+
+# ─── Fallback session — last user message (for LLM context) ──────────────────
+
+async def set_fallback_user_message(user_id: int, text: str) -> None:
+    """Store the most recent message received from user_id during a fallback session."""
+    await _r().set(f"fallback:last_msg:{user_id}", text, ex=300)
+
+
+async def get_fallback_user_message(user_id: int) -> str:
+    """Return the last stored user message for a fallback session.
+
+    Returns an empty string when no message has been stored, so callers
+    never receive None and a conditional check on truthiness is sufficient.
+    """
+    val = await _r().get(f"fallback:last_msg:{user_id}")
+    return val or ""
+
+
+async def clear_fallback_user_message(user_id: int) -> None:
+    """Delete the stored last user message for user_id."""
+    await _r().delete(f"fallback:last_msg:{user_id}")

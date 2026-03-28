@@ -134,6 +134,9 @@ async def start_fallback_session(bot: Bot, user_id: int) -> None:
     Feature 5: Extends minimum duration for first-session users.
     Feature 6: Reads randomness_level from admin config.
     Feature 9: Reads and updates global patterns to avoid repetition.
+    Tone system: Derives tone from user's gender profile (female → "feminine",
+                 male → "masculine", unset → "neutral"); tone is passed to
+                 BehaviorController and stored in session for consistency.
     Ultra-human: Handles list[str] bursts from generate_response(); sends
                  typing indicators before each message.
     """
@@ -152,6 +155,15 @@ async def start_fallback_session(bot: Bot, user_id: int) -> None:
     if is_first_session:
         randomness_level = 0.3  # low variance → more predictable / pleasant
 
+    # Tone system: derive tone from the user's gender stored in their profile
+    gender = user.get("gender") if user else None
+    if gender == "female":
+        tone = "feminine"
+    elif gender == "male":
+        tone = "masculine"
+    else:
+        tone = "neutral"
+
     # Feature 9: Read current global patterns before picking persona
     global_patterns = await redis.get_global_patterns()
 
@@ -160,6 +172,7 @@ async def start_fallback_session(bot: Bot, user_id: int) -> None:
     controller = BehaviorController(
         persona_name=persona_name,
         randomness_level=randomness_level,  # Feature 6
+        tone=tone,                          # Tone system
     )
     await _record_persona_used(user_id, persona_name)
 
@@ -169,8 +182,9 @@ async def start_fallback_session(bot: Bot, user_id: int) -> None:
     start_time = time.time()
     message_count = 0
 
-    # Signal that user is "connected" to the fallback partner
+    # Signal that user is "connected" to the fallback partner; store tone
     await redis.set_session(user_id, _FALLBACK_PARTNER_ID, session_id)
+    await redis.set_session_tone(user_id, tone)
 
     # Opening message after a short delay
     await asyncio.sleep(controller.get_delay())
@@ -194,8 +208,16 @@ async def start_fallback_session(bot: Bot, user_id: int) -> None:
         await asyncio.sleep(controller.get_delay())
 
         try:
-            messages = controller.generate_response()
-            # generate_response() may return an empty list (question-ignore)
+            # Read the most recent user message for LLM context, then clear it
+            # so each response cycle sees only fresh input.
+            last_user_msg = await redis.get_fallback_user_message(user_id)
+            if last_user_msg:
+                await redis.clear_fallback_user_message(user_id)
+
+            messages = await controller.generate_response_async(
+                user_message=last_user_msg,
+            )
+            # generate_response_async() may return an empty list (question-ignore)
             for i, msg in enumerate(messages):
                 if i > 0:
                     # Brief human-like pause between burst messages

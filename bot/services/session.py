@@ -35,13 +35,20 @@ _ENGAGEMENT_GOOD_THRESHOLD = 3.0
 _ENGAGEMENT_BAD_THRESHOLD = 1.0
 
 
-async def create_session(bot: Bot, user1_id: int, user2_id: int) -> str:
+async def create_session(
+    bot: Bot,
+    user1_id: int,
+    user2_id: int,
+    tone: str = "neutral",
+) -> str:
     """Create a new session between two users. Returns session_id."""
     session_id = generate_session_id()
-    # Store hot-state in Redis
+    # Store hot-state in Redis (including tone for session consistency)
     await redis.set_session(user1_id, user2_id, session_id)
+    await redis.set_session_tone(user1_id, tone)
+    await redis.set_session_tone(user2_id, tone)
     # Persist to MongoDB
-    await db.create_session(session_id, user1_id, user2_id)
+    await db.create_session(session_id, user1_id, user2_id, tone=tone)
     return session_id
 
 

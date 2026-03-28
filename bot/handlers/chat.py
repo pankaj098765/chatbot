@@ -65,8 +65,10 @@ async def relay_message(message: Message, state: FSMContext, bot: Bot) -> None:
 
     partner_id = await redis.get_partner(user_id)
     if not partner_id or partner_id < 0:
-        # Fallback session — messages are "received" but silently dropped
-        # (the BehaviorController loop responds on its own schedule)
+        # Fallback session — store the user's message so the LLM engine can use
+        # it as context when generating the next response, then return.
+        if text:
+            await redis.set_fallback_user_message(user_id, text)
         return
 
     # Relay to real partner

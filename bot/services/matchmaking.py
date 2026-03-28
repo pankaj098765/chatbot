@@ -23,6 +23,13 @@ Retry strategy:
 Low-quality pool (Fix #1):
   Users with high negative_feedback_count are separated into a low-quality
   pool so they preferentially match each other.
+
+# UPDATED
+Feature 3: Queue Imbalance Auto-Correction — when the queue is male-heavy,
+           male enqueue priority is reduced and female priority boosted.
+Feature 5: First-session boost is applied explicitly at enqueue time.
+Feature 7: Admin config priority_boost is added to every enqueue score.
+Feature 10: Retry limit is read dynamically from admin config.
 """
 from __future__ import annotations
 
@@ -37,6 +44,12 @@ from bot.database import redis_client as redis
 
 # Threshold for labelling a user as "low quality" based on feedback
 _LOW_QUALITY_THRESHOLD = 5
+
+# Feature 3: Gender ratio threshold above which the queue is considered male-heavy
+_MALE_HEAVY_RATIO = 2.0
+# Priority adjustments for gender imbalance correction
+_MALE_HEAVY_PENALTY = 20.0
+_FEMALE_PRIORITY_BOOST = 30.0
 
 
 def calc_priority_score(user: dict, wait_seconds: float = 0.0) -> float:
@@ -133,11 +146,42 @@ async def build_unified_candidates(
 # ─── Queue helpers ────────────────────────────────────────────────────────────
 
 async def enqueue_user(user_id: int) -> None:
-    """Add a user to the matchmaking queue with their current priority score."""
+    """
+    Add a user to the matchmaking queue with their current priority score.
+
+    # UPDATED
+    Feature 3: Applies gender-imbalance correction — reduces male priority when
+               the queue is male-heavy, boosts female priority.
+    Feature 7: Adds admin-configured priority_boost to every score.
+    """
     user = await db.get_user(user_id)
     if not user:
         return
     score = calc_priority_score(user)
+
+    # Feature 7: Admin config priority_boost
+    try:
+        from bot.services.admin_control import get_config
+        config = await get_config()
+        score += float(config.get("priority_boost", 0.0))
+    except Exception:
+        pass
+
+    # Feature 3: Gender imbalance auto-correction
+    user_gender = user.get("gender")
+    if user_gender in ("male", "female"):
+        try:
+            male_count, female_count = await redis.get_gender_queue_stats()
+            if female_count > 0:
+                ratio = male_count / female_count
+                if ratio > _MALE_HEAVY_RATIO:
+                    if user_gender == "male":
+                        score -= _MALE_HEAVY_PENALTY
+                    else:
+                        score += _FEMALE_PRIORITY_BOOST
+        except Exception:
+            pass
+
     await redis.add_to_queue(user_id, score)
     await redis.set_search_start(user_id)
 
@@ -216,18 +260,28 @@ async def find_match(seeker_id: int) -> Optional[CandidateUser]:
     Attempt to match seeker with someone from the unified candidate pool.
     Returns a CandidateUser (real or simulated) or None.
 
-    Tries up to 3 attempts with decreasing filter strictness.
+    # UPDATED Feature 10: Retry limit is read from admin config so the
+    queue monitor can increase it dynamically when the success rate is low.
     A simulated candidate is injected at low priority and will only be returned
-    if no real user is compatible across all three attempts.
+    if no real user is compatible across all retry attempts.
     """
     seeker = await db.get_user(seeker_id)
     if not seeker:
         return None
 
+    # Feature 10: Dynamic retry limit from admin config
+    retry_limit = 3
+    try:
+        from bot.services.admin_control import get_config
+        config = await get_config()
+        retry_limit = max(1, int(config.get("retry_limit", 3)))
+    except Exception:
+        pass
+
     # Build unified pool: real users + one simulated slot at lowest priority
     candidates = await build_unified_candidates(seeker_id, include_simulated=True)
 
-    for attempt in range(1, 4):
+    for attempt in range(1, retry_limit + 1):
         for candidate in candidates:
             if await _is_compatible(seeker, candidate, attempt):
                 return candidate

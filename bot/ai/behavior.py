@@ -3,11 +3,16 @@ bot/ai/behavior.py — Dynamic behavior simulation for the fallback engine.
 
 BehaviorController selects a persona and generates varied, non-repetitive
 responses with randomised delays to mimic a real chat partner.
+
+# UPDATED
+Feature 6: Randomness limiter — a randomness_level (0.3–0.7) is injected at
+           construction time and applied to delay spread and message variation.
+Feature 9: Global pattern breaker — the controller exposes current pattern
+           metadata so fallback.py can detect and rotate away from repetition.
 """
 from __future__ import annotations
 
 import random
-import re
 
 from bot.ai.personas import PERSONAS, Persona
 
@@ -97,12 +102,18 @@ def _apply_typo(text: str) -> str:
 class BehaviorController:
     """Generates responses and delays for a simulated fallback partner."""
 
-    def __init__(self, persona_name: str | None = None) -> None:
+    def __init__(
+        self,
+        persona_name: str | None = None,
+        randomness_level: float = 0.5,  # Feature 6: 0.3 (low) → 0.7 (high)
+    ) -> None:
         # Fix #5: Accept an explicit persona_name to support diversity control
         self._persona: Persona = (
             PERSONAS[persona_name] if persona_name and persona_name in PERSONAS
             else self._select_persona()
         )
+        # Feature 6: Clamp randomness_level to valid range
+        self._randomness_level: float = max(0.3, min(0.7, randomness_level))
         self._used_messages: set[str] = set()
         self._message_count: int = 0
 
@@ -116,6 +127,23 @@ class BehaviorController:
     @property
     def persona(self) -> Persona:
         return self._persona
+
+    # ── Feature 9: Global pattern metadata ──────────────────────────────────
+
+    @property
+    def current_pattern(self) -> dict:
+        """
+        # NEW
+        Return a snapshot of this controller's behavioural fingerprint.
+        Used by fallback.py to update the global pattern tracker so the next
+        session can diverge from it.
+        """
+        lo, hi = self._persona.response_speed_range
+        return {
+            "last_persona": self._persona.name,
+            "last_delay_range": f"{lo:.1f}-{hi:.1f}",
+            "last_reply_style": self._persona.typing_style,
+        }
 
     # ── Response generation ──────────────────────────────────────────────────
 
@@ -148,12 +176,22 @@ class BehaviorController:
     # ── Delay ────────────────────────────────────────────────────────────────
 
     def get_delay(self) -> float:
-        """Return a randomised typing delay within the persona's speed range."""
+        """
+        Return a randomised typing delay within the persona's speed range.
+
+        # UPDATED Feature 6: The spread is scaled by randomness_level so that
+        low values (0.3) produce predictably centred delays while high values
+        (0.7) allow the full range with added jitter.
+        """
         lo, hi = self._persona.response_speed_range
-        # Add slight jitter to avoid perfectly uniform distribution
-        base = random.uniform(lo, hi)
-        jitter = random.gauss(0, 0.5)
-        return max(lo, min(hi, base + jitter))
+        center = (lo + hi) / 2.0
+        # Scale the spread: at level 0.5 the full range is used; outside it shrinks/expands.
+        half_spread = ((hi - lo) / 2.0) * (self._randomness_level / 0.5)
+        actual_lo = max(lo, center - half_spread)
+        actual_hi = min(hi, center + half_spread)
+        base = random.uniform(actual_lo, actual_hi)
+        jitter = random.gauss(0, 0.5 * self._randomness_level)
+        return max(actual_lo, min(actual_hi, base + jitter))
 
     # ── Exit logic ───────────────────────────────────────────────────────────
 

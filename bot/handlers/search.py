@@ -191,8 +191,8 @@ async def _do_next(message: Message, state: FSMContext, bot: Bot) -> None:
     user_id = message.from_user.id  # type: ignore[union-attr]
     partner_id = await redis.get_partner(user_id)
 
-    # End current session
-    await session.end_session(user_id, exit_reason="next")
+    # End current session — Feature 4: pass bot for exit experience message
+    await session.end_session(user_id, exit_reason="next", bot=bot)
 
     # Notify partner
     if partner_id and partner_id > 0:
@@ -231,7 +231,8 @@ async def _do_stop(message: Message, state: FSMContext, bot: Bot) -> None:
     user_id = message.from_user.id  # type: ignore[union-attr]
     partner_id = await redis.get_partner(user_id)
 
-    await session.end_session(user_id, exit_reason="stop")
+    # Feature 4: pass bot for exit experience message
+    await session.end_session(user_id, exit_reason="stop", bot=bot)
     await matchmaking.dequeue_user(user_id)
     await state.set_state(UserState.IDLE)
 

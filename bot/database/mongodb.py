@@ -91,6 +91,10 @@ async def create_user(user_id: int, username: str | None = None) -> dict:
         "last_personas_used": [],
         # Fix #9: Intent detection
         "intent": None,           # "gender_check" | None
+        # Feature 8: Emotional state detection (NEW)
+        "emotional_state": "neutral",   # "satisfied" | "neutral" | "frustrated"
+        # Feature 1: Last session engagement score (NEW)
+        "last_engagement_score": 0.0,
     }
     await _users().insert_one(doc)
     doc.pop("_id", None)
@@ -126,6 +130,7 @@ async def create_session(session_id: str, user1_id: int, user2_id: int) -> dict:
         "exit_reason": None,
         "quality": None,          # "GOOD_CHAT" | "BAD_CHAT" | None
         "is_fallback": False,
+        "engagement_score": 0.0,  # Feature 1: computed on session end (NEW)
     }
     await _sessions().insert_one(doc)
     doc.pop("_id", None)

@@ -1,5 +1,5 @@
 {
-  "welcome_message": "👋 ¡Bienvenido a <b>Anonymous Chat</b>!\n\nSerás emparejado con un extraño aleatorio para una conversación privada y anónima.\n\n• 🔍 /search — encontrar pareja\n• ⏭ /next   — siguiente pareja\n• 🛑 /stop   — terminar chat\n• 💳 /pay    — Planes Premium y VIP\n• 🌐 /language — cambiar idioma\n\n<i>Tu identidad nunca se revela.</i>",
+  "welcome_message": "👋 ¡Bienvenido a <b>{app_name}</b>!\n\nSerás emparejado con un extraño aleatorio para una conversación privada y anónima.\n\n• 🔍 /search — encontrar pareja\n• ⏭ /next   — siguiente pareja\n• 🛑 /stop   — terminar chat\n• 💳 /pay    — Planes Premium y VIP\n• 🌐 /language — cambiar idioma\n\n<i>Tu identidad nunca se revela.</i>",
   "help_message": "<b>Comandos:</b>\n/start    — pantalla de bienvenida\n/search   — buscar pareja\n/next     — siguiente extraño\n/stop     — salir del chat\n/pay      — Premium / VIP\n/vip      — beneficios VIP\n/language — cambiar idioma\n\n<b>Premium</b> (⭐100 Stars): filtro de género\n<b>VIP</b> (⭐250 Stars): matching prioritario",
   "gender_prompt": "\n\nPrimero, dinos tu género (para el matching Premium):",
   "gender_set_male": "✅ Género establecido como <b>Masculino</b>.\n\n¡Usa /search para encontrar a un extraño!",
@@ -45,5 +45,6 @@
   "language_select_prompt": "🌐 Escribe un nombre o código de idioma para filtrar, o elige uno abajo:",
   "language_filter_results": "🌐 Idiomas encontrados — toca para seleccionar:",
   "language_filter_empty": "❌ No se encontró ningún idioma para <b>{query}</b>.\n\nEnvía /language para ver todas las opciones.",
-  "language_set": "✅ Idioma establecido en <b>{language_name}</b>.\n\nModo de chat: <b>{chat_mode}</b>.\n\n¡Usa /search para encontrar un extraño!"
+  "language_set": "✅ Idioma establecido en <b>{language_name}</b>.\n\nModo de chat: <b>{chat_mode}</b>.\n\n¡Usa /search para encontrar un extraño!",
+  "payment_disabled": "💳 Los pagos no están disponibles en este bot."
 }

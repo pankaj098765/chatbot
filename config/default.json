@@ -1,0 +1,8 @@
+{
+  "brand_name": "Anonymous Chat",
+  "default_language": "en",
+  "allowed_languages": ["en", "hi", "es"],
+  "default_chat_mode": "mixed",
+  "ai_enabled": true,
+  "payment_enabled": true
+}

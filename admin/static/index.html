@@ -307,7 +307,7 @@
 <body>
 
 <header>
-  <h1>🤖 <span>Anonymous Chat Bot</span> &mdash; Admin Dashboard</h1>
+  <h1>🤖 <span id="brand-heading">Anonymous Chat Bot</span> &mdash; Admin Dashboard</h1>
   <div class="auth-bar">
     <input type="password" id="tokenInput" placeholder="Admin Token" autocomplete="off" />
     <span class="badge disconnected" id="authBadge">Not connected</span>
@@ -516,6 +516,13 @@
   }
 
   function applyConfigToUI(cfg) {
+    // Update brand name in header and page title
+    if (cfg.brand_name) {
+      const heading = document.getElementById('brand-heading');
+      if (heading) heading.textContent = cfg.brand_name + ' Bot';
+      document.title = cfg.brand_name + ' Bot — Admin Dashboard';
+    }
+
     ['fallback_rate', 'retry_limit', 'priority_boost', 'randomness_level'].forEach(key => {
       const val = cfg[key] !== undefined ? cfg[key] : null;
       if (val === null) return;

@@ -8,6 +8,7 @@ from __future__ import annotations
 import redis.asyncio as aioredis
 
 from admin.config import settings
+from config.app_config import app_config
 
 _redis: aioredis.Redis | None = None
 
@@ -15,11 +16,15 @@ QUEUE_KEY = "matchmaking_queue"
 ADMIN_CONFIG_KEY = "admin:config"
 QUEUE_STATS_KEY = "queue:stats"
 
-_CONFIG_DEFAULTS: dict[str, float] = {
+_CONFIG_DEFAULTS: dict = {
     "fallback_rate": 0.10,
     "retry_limit": 3.0,
     "priority_boost": 0.0,
     "randomness_level": 0.5,
+    # Seeded from app_config so language defaults reflect buyer's configuration
+    "default_language": app_config.default_language,
+    "allowed_languages": ",".join(app_config.allowed_languages),
+    "default_chat_mode": app_config.default_chat_mode,
 }
 
 

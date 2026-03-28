@@ -13,14 +13,18 @@ Fix #5: Session Diversity Control
   twice in a row so each session feels different.
 
 # UPDATED
-Feature 2: Global Persona Usage Tracking (anti-detection) — adjusts persona
-           selection weights so no single persona dominates globally.
-Feature 5: First-session experience boost — forces longer minimum duration and
-           lower randomness for users on their very first session.
-Feature 6: Randomness Limiter — reads randomness_level from admin config and
-           passes it to BehaviorController.
-Feature 9: Global Pattern Breaker — avoids reusing the same persona/style that
-           was recorded as the last global pattern.
+Feature 2:  Global Persona Usage Tracking (anti-detection) — adjusts persona
+            selection weights so no single persona dominates globally.
+Feature 5:  First-session experience boost — forces longer minimum duration and
+            lower randomness for users on their very first session.
+Feature 6:  Randomness Limiter — reads randomness_level from admin config and
+            passes it to BehaviorController.
+Feature 9:  Global Pattern Breaker — avoids reusing the same persona/style that
+            was recorded as the last global pattern.
+Ultra-human upgrade:
+  - generate_response() now returns list[str]; bursts are sent with short delays.
+  - Typing action (chat_action) is sent before each message for realism.
+  - New "playful" persona is included in rotation.
 """
 from __future__ import annotations
 
@@ -29,6 +33,7 @@ import random
 import time
 
 from aiogram import Bot
+from aiogram.enums import ChatAction
 
 from bot.ai.behavior import BehaviorController
 from bot.ai.personas import PERSONAS
@@ -111,6 +116,14 @@ async def _record_persona_used(user_id: int, persona_name: str) -> None:
     await db.update_user(user_id, {"last_personas_used": last_personas})
 
 
+async def _send_with_typing(bot: Bot, user_id: int, text: str) -> None:
+    """Send a typing action then the message, mimicking a real user typing."""
+    await bot.send_chat_action(user_id, ChatAction.TYPING)
+    # Brief pause to let the typing indicator show
+    await asyncio.sleep(random.uniform(0.4, 1.2))
+    await bot.send_message(user_id, text)
+
+
 async def start_fallback_session(bot: Bot, user_id: int) -> None:
     """
     Start a simulated fallback chat session for user_id.
@@ -121,6 +134,8 @@ async def start_fallback_session(bot: Bot, user_id: int) -> None:
     Feature 5: Extends minimum duration for first-session users.
     Feature 6: Reads randomness_level from admin config.
     Feature 9: Reads and updates global patterns to avoid repetition.
+    Ultra-human: Handles list[str] bursts from generate_response(); sends
+                 typing indicators before each message.
     """
     session_id = generate_session_id()
 
@@ -160,7 +175,7 @@ async def start_fallback_session(bot: Bot, user_id: int) -> None:
     # Opening message after a short delay
     await asyncio.sleep(controller.get_delay())
     try:
-        await bot.send_message(user_id, "Hey! 👋")
+        await _send_with_typing(bot, user_id, "Hey! 👋")
         message_count += 1
     except Exception:
         await redis.clear_session(user_id)
@@ -179,16 +194,21 @@ async def start_fallback_session(bot: Bot, user_id: int) -> None:
         await asyncio.sleep(controller.get_delay())
 
         try:
-            response = controller.generate_response()
-            await bot.send_message(user_id, response)
-            message_count += 1
+            messages = controller.generate_response()
+            # generate_response() may return an empty list (question-ignore)
+            for i, msg in enumerate(messages):
+                if i > 0:
+                    # Brief human-like pause between burst messages
+                    await asyncio.sleep(controller.get_burst_delay())
+                await _send_with_typing(bot, user_id, msg)
+                message_count += 1
         except Exception:
             break
 
     # Natural exit
     try:
         exit_msg = controller.exit_message()
-        await bot.send_message(user_id, exit_msg)
+        await _send_with_typing(bot, user_id, exit_msg)
         await bot.send_message(
             user_id,
             "Your partner has disconnected.\n\nTap /search to find a new stranger!",

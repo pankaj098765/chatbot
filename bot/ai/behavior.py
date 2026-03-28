@@ -355,7 +355,7 @@ _PERSONA_EMOJIS: dict[str, list[str]] = {
 
 _PHONETIC_SUBS: list[tuple[str, str]] = [
     ("kya", "kia"), ("nahi", "nhi"), ("hai", "h"), ("kar", "kr"),
-    ("raha", "rha"), ("karo", "kro"), ("acha", "acha"),
+    ("raha", "rha"), ("karo", "kro"), ("acha", "achha"),
     ("kuch", "kch"), ("wala", "vala"), ("tum", "tmm"), ("mein", "main"),
     ("matlab", "matlb"), ("theek", "thk"), ("haan", "han"),
     ("yaar", "yar"), ("seriously", "sriously"), ("actually", "actualy"),

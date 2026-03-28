@@ -522,6 +522,92 @@ class BehaviorController:
 
         return messages
 
+    async def generate_response_async(
+        self,
+        user_message: str = "",
+        *,
+        message_count: int = 0,
+    ) -> list[str]:
+        """
+        Async response generator with hybrid LLM + template decision logic.
+
+        Decision:
+          60 % → attempt LLM (subject to cost-control guard)
+          40 % → use template system directly
+
+        Cost-control guard — LLM is skipped when:
+          • message_count >= 10  (session no longer in early stage)
+          • LLM engine returns None (unavailable / API error)
+
+        On LLM failure the method seamlessly falls back to generate_response().
+
+        Parameters
+        ----------
+        user_message:
+            The most recent message sent by the human user.  Used as LLM
+            context.  Pass "" when unavailable.
+        message_count:
+            Current message count in this session, for the cost-control guard.
+        """
+        self._message_count += 1
+
+        # ── Question-ignore: return nothing ──────────────────────────────────
+        if random.random() < self._persona.question_ignore_rate:
+            return []
+
+        # ── Memory inconsistency ─────────────────────────────────────────────
+        if self._context and random.random() < self._persona.memory_inconsistency_rate:
+            return [random.choice(_MEMORY_INCONSISTENCY)]
+
+        # ── Random topic change ──────────────────────────────────────────────
+        if random.random() < self._persona.topic_change_rate:
+            tc = random.choice(_TOPIC_CHANGERS)
+            self._context.append(tc)
+            return [tc]
+
+        # ── Hybrid LLM / template decision ───────────────────────────────────
+        # Cost-control: LLM is only worthwhile in the early stage (first 10 msgs)
+        # where engagement is highest and impression matters most.
+        use_llm = (
+            random.random() < 0.60          # 60 % probability gate
+            and message_count < 10          # early session stage
+            and user_message                # only when we have context
+        )
+
+        if use_llm:
+            from bot.ai.llm_engine import generate_llm_response  # lazy import
+
+            context = {
+                "user_message": user_message,
+                "persona": self._persona.name,
+                "tone": self._tone,
+                "history": list(self._context[-3:]),
+                "emotional_state": self._persona.emotional_mode,
+            }
+            llm_msgs = await generate_llm_response(context)
+            if llm_msgs:
+                for msg in llm_msgs:
+                    self._context.append(msg)
+                if len(self._context) > 10:
+                    self._context = self._context[-10:]
+                return llm_msgs
+            # LLM failed — fall through to template
+
+        # ── Template fallback ─────────────────────────────────────────────────
+        main_msg = self._decorate(self._pick_message())
+        self._context.append(main_msg)
+        if len(self._context) > 10:
+            self._context = self._context[-10:]
+
+        messages = [main_msg]
+        if random.random() < self._persona.burst_probability:
+            follow_up = self._decorate(self._pick_message())
+            messages.append(follow_up)
+            if random.random() < 0.25:
+                messages.append(self._decorate(self._pick_message()))
+
+        return messages
+
     # ── Delay ────────────────────────────────────────────────────────────────
 
     def get_delay(self) -> float:

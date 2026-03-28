@@ -4,7 +4,7 @@ bot/config.py — Central configuration loaded from environment variables.
 from __future__ import annotations
 
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from dotenv import load_dotenv
 
@@ -33,6 +33,11 @@ class Settings:
     vip_price_stars: int = 250
     subscription_days: int = 30
 
+    # LLM integration
+    openai_api_key: str = ""      # empty → LLM disabled
+    llm_model: str = "gpt-4o-mini"
+    llm_enabled: bool = True      # global kill-switch
+
 
 def _get_settings() -> Settings:
     token = os.getenv("BOT_TOKEN")
@@ -44,6 +49,9 @@ def _get_settings() -> Settings:
         redis_url=os.getenv("REDIS_URL", "redis://localhost:6379"),
         db_name=os.getenv("DB_NAME", "anonymous_chat"),
         debug=os.getenv("DEBUG", "false").lower() == "true",
+        openai_api_key=os.getenv("OPENAI_API_KEY", ""),
+        llm_model=os.getenv("LLM_MODEL", "gpt-4o-mini"),
+        llm_enabled=os.getenv("LLM_ENABLED", "true").lower() == "true",
     )
 
 

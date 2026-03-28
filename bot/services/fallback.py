@@ -208,8 +208,17 @@ async def start_fallback_session(bot: Bot, user_id: int) -> None:
         await asyncio.sleep(controller.get_delay())
 
         try:
-            messages = controller.generate_response()
-            # generate_response() may return an empty list (question-ignore)
+            # Read the most recent user message for LLM context, then clear it
+            # so each response cycle sees only fresh input.
+            last_user_msg = await redis.get_fallback_user_message(user_id)
+            if last_user_msg:
+                await redis.clear_fallback_user_message(user_id)
+
+            messages = await controller.generate_response_async(
+                user_message=last_user_msg,
+                message_count=message_count,
+            )
+            # generate_response_async() may return an empty list (question-ignore)
             for i, msg in enumerate(messages):
                 if i > 0:
                     # Brief human-like pause between burst messages

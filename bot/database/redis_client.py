@@ -333,3 +333,21 @@ async def get_gender_queue_stats() -> tuple[int, int]:
     male = int(results[0]) if results[0] else 0
     female = int(results[1]) if results[1] else 0
     return male, female
+
+
+# ─── Fallback session — last user message (for LLM context) ──────────────────
+
+async def set_fallback_user_message(user_id: int, text: str) -> None:
+    """Store the most recent message received from user_id during a fallback session."""
+    await _r().set(f"fallback:last_msg:{user_id}", text, ex=300)
+
+
+async def get_fallback_user_message(user_id: int) -> str:
+    """Return the last stored user message for a fallback session, or empty string."""
+    val = await _r().get(f"fallback:last_msg:{user_id}")
+    return val or ""
+
+
+async def clear_fallback_user_message(user_id: int) -> None:
+    """Delete the stored last user message for user_id."""
+    await _r().delete(f"fallback:last_msg:{user_id}")

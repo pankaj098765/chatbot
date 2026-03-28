@@ -23,6 +23,7 @@ from bot.keyboards.inline import (
 )
 from bot.services import admin_control
 from bot.utils.states import UserState
+from config.app_config import app_config
 
 router = Router()
 
@@ -58,13 +59,13 @@ async def cmd_start(message: Message, state: FSMContext) -> None:
     # Ask for gender on first use (used for optional premium filter)
     if existing.get("gender") is None:
         await message.answer(
-            t("welcome_message", lang) + t("gender_prompt", lang),
+            t("welcome_message", lang, app_name=app_config.brand_name) + t("gender_prompt", lang),
             parse_mode="HTML",
             reply_markup=gender_keyboard(lang),
         )
     else:
         await message.answer(
-            t("welcome_message", lang),
+            t("welcome_message", lang, app_name=app_config.brand_name),
             parse_mode="HTML",
             reply_markup=search_keyboard(lang),
         )

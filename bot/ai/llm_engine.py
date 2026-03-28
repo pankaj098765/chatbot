@@ -21,6 +21,7 @@ import random
 import re
 
 from bot.config import settings
+from config.app_config import app_config
 
 logger = logging.getLogger(__name__)
 
@@ -34,7 +35,7 @@ def _get_client():
     global _client
     if _client is not None:
         return _client
-    if not settings.openai_api_key or not settings.llm_enabled:
+    if not app_config.ai_enabled or not settings.openai_api_key or not settings.llm_enabled:
         return None
     try:
         from openai import AsyncOpenAI  # type: ignore[import]

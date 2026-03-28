@@ -26,6 +26,7 @@ from bot.config import settings
 from bot.database import mongodb as db
 from bot.i18n import lang_of, t
 from bot.keyboards.inline import payment_keyboard, search_keyboard
+from config.app_config import app_config
 
 router = Router()
 
@@ -46,6 +47,9 @@ _PLAN_INFO = {
 async def cmd_pay(message: Message) -> None:
     user = await db.get_user(message.from_user.id)  # type: ignore[union-attr]
     lang = lang_of(user)
+    if not app_config.payment_enabled:
+        await message.answer(t("payment_disabled", lang))
+        return
     await message.answer(
         t(
             "choose_plan",
@@ -62,6 +66,9 @@ async def cmd_pay(message: Message) -> None:
 async def cmd_vip(message: Message) -> None:
     user = await db.get_user(message.from_user.id)  # type: ignore[union-attr]
     lang = lang_of(user)
+    if not app_config.payment_enabled:
+        await message.answer(t("payment_disabled", lang))
+        return
     await message.answer(
         t(
             "vip_info",
@@ -95,6 +102,9 @@ async def cb_buy_premium(callback: CallbackQuery, bot: Bot) -> None:
     await callback.answer()
     user = await db.get_user(callback.from_user.id)
     lang = lang_of(user)
+    if not app_config.payment_enabled:
+        await callback.message.answer(t("payment_disabled", lang))  # type: ignore[union-attr]
+        return
     await _send_invoice(bot, callback.from_user.id, "premium", lang)
 
 
@@ -103,6 +113,9 @@ async def cb_buy_vip(callback: CallbackQuery, bot: Bot) -> None:
     await callback.answer()
     user = await db.get_user(callback.from_user.id)
     lang = lang_of(user)
+    if not app_config.payment_enabled:
+        await callback.message.answer(t("payment_disabled", lang))  # type: ignore[union-attr]
+        return
     await _send_invoice(bot, callback.from_user.id, "vip", lang)
 
 

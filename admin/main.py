@@ -24,6 +24,7 @@ from fastapi.staticfiles import StaticFiles
 from admin.database import mongodb, redis_client
 from admin.routes.config_routes import router as config_router
 from admin.routes.stats import router as stats_router
+from config.app_config import app_config
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -43,8 +44,8 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(
-    title="Anonymous Chat Bot — Admin Dashboard",
-    description="Real-time control panel for the Telegram Anonymous Chat Bot backend.",
+    title=f"{app_config.brand_name} Bot — Admin Dashboard",
+    description=f"Real-time control panel for the Telegram {app_config.brand_name} Bot backend.",
     version="1.0.0",
     docs_url="/api/docs",
     redoc_url=None,

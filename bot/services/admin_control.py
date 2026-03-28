@@ -31,16 +31,17 @@ Usage
 from __future__ import annotations
 
 from bot.database import redis_client as redis
+from config.app_config import app_config
 
 _DEFAULTS: dict[str, object] = {
     "fallback_rate": 0.10,
     "retry_limit": 3.0,
     "priority_boost": 0.0,
     "randomness_level": 0.5,
-    # UPDATED: language settings
-    "default_language": "en",
-    "allowed_languages": "en,hi,es",
-    "default_chat_mode": "mixed",
+    # Seeded from app_config so a buyer's config.json or .env takes effect immediately
+    "default_language": app_config.default_language,
+    "allowed_languages": ",".join(app_config.allowed_languages),
+    "default_chat_mode": app_config.default_chat_mode,
 }
 
 

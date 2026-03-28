@@ -10,6 +10,7 @@ from pydantic import BaseModel, field_validator
 
 from admin.auth import require_admin
 from admin.database import redis_client
+from config.app_config import app_config
 
 router = APIRouter()
 
@@ -86,8 +87,13 @@ class ConfigUpdate(BaseModel):
 
 @router.get("/config", dependencies=[Depends(require_admin)])
 async def get_config() -> dict:
-    """Return the current admin runtime configuration."""
-    return await redis_client.get_admin_config()
+    """Return the current admin runtime configuration including static brand settings."""
+    cfg = await redis_client.get_admin_config()
+    # Expose read-only brand fields so the dashboard can display them
+    cfg["brand_name"] = app_config.brand_name
+    cfg["ai_enabled"] = app_config.ai_enabled
+    cfg["payment_enabled"] = app_config.payment_enabled
+    return cfg
 
 
 @router.post("/config/update", dependencies=[Depends(require_admin)])

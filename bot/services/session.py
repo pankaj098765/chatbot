@@ -25,6 +25,7 @@ from aiogram import Bot
 
 from bot.database import mongodb as db
 from bot.database import redis_client as redis
+from bot.i18n import lang_of, t
 from bot.utils.helpers import generate_session_id
 
 _FALLBACK_PARTNER_ID = -1
@@ -118,26 +119,26 @@ async def compute_engagement_score(
 
 # ─── Feature 4: Session exit experience ──────────────────────────────────────
 
-def get_exit_experience_message(quality: str | None) -> str:
+def get_exit_experience_message(quality: str | None, lang: str = "en") -> str:
     """
     # NEW
     Return a short post-session message that matches the session quality.
     """
     if quality == "GOOD_CHAT":
-        return "🔥 That was a good match!"
+        return t("exit_good_chat", lang)
     if quality == "BAD_CHAT":
-        return "🎯 Better matches coming next"
-    return "🔄 Trying to find someone better…"
+        return t("exit_bad_chat", lang)
+    return t("exit_neutral", lang)
 
 
-async def send_exit_experience(bot: Bot, user_id: int, quality: str | None) -> None:
+async def send_exit_experience(bot: Bot, user_id: int, quality: str | None, lang: str = "en") -> None:
     """
     # NEW
     Send the post-session experience message to user_id.
     Silently swallowed on delivery failure (user may have blocked the bot).
     """
     try:
-        await bot.send_message(user_id, get_exit_experience_message(quality))
+        await bot.send_message(user_id, get_exit_experience_message(quality, lang))
     except Exception:
         pass
 
@@ -213,6 +214,8 @@ async def end_session(
 
     # Feature 4: Send post-session exit experience message
     if bot is not None:
-        await send_exit_experience(bot, user_id, quality)
+        user_doc = await db.get_user(user_id)
+        lang = lang_of(user_doc)
+        await send_exit_experience(bot, user_id, quality, lang)
 
     return session_id

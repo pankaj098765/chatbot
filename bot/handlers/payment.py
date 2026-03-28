@@ -4,6 +4,9 @@ bot/handlers/payment.py — Telegram Stars payment flow.
 Plans:
   Premium (100 Stars) — unlocks gender filter (30 days)
   VIP     (250 Stars) — priority matching (30 days)
+
+# UPDATED: all user-facing strings are now rendered via t() so every message
+  is delivered in the user's configured ui_language.
 """
 from __future__ import annotations
 
@@ -21,26 +24,18 @@ from aiogram.types import (
 
 from bot.config import settings
 from bot.database import mongodb as db
+from bot.i18n import lang_of, t
 from bot.keyboards.inline import payment_keyboard, search_keyboard
 
 router = Router()
 
+# Static plan metadata — only prices and payload identifiers (non-localised)
 _PLAN_INFO = {
     "premium": {
-        "title": "⭐ Premium Plan",
-        "description": (
-            "Unlock <b>gender filter</b> — choose to match only with "
-            "male or female strangers.\n\nValid for 30 days."
-        ),
         "price": settings.premium_price_stars,
         "payload": "premium",
     },
     "vip": {
-        "title": "👑 VIP Plan",
-        "description": (
-            "Get <b>priority matching</b> — jump to the front of the queue "
-            "and get matched faster than everyone else.\n\nValid for 30 days."
-        ),
         "price": settings.vip_price_stars,
         "payload": "vip",
     },
@@ -49,15 +44,15 @@ _PLAN_INFO = {
 
 @router.message(Command("pay"))
 async def cmd_pay(message: Message) -> None:
+    user = await db.get_user(message.from_user.id)  # type: ignore[union-attr]
+    lang = lang_of(user)
     await message.answer(
-        "💳 <b>Choose a plan:</b>\n\n"
-        f"⭐ <b>Premium</b> — {settings.premium_price_stars} Stars\n"
-        "  → Gender filter: match only males or females\n"
-        "  → 👀 <i>Premium unlocks more users in the pool</i>\n\n"
-        f"👑 <b>VIP</b> — {settings.vip_price_stars} Stars\n"
-        "  → Priority queue: get matched faster\n"
-        "  → 🔥 <i>VIP users get faster matches — skip the wait</i>\n\n"
-        "<i>Powered by Telegram Stars</i>",
+        t(
+            "choose_plan",
+            lang,
+            premium_price=settings.premium_price_stars,
+            vip_price=settings.vip_price_stars,
+        ),
         parse_mode="HTML",
         reply_markup=payment_keyboard(),
     )
@@ -65,28 +60,32 @@ async def cmd_pay(message: Message) -> None:
 
 @router.message(Command("vip"))
 async def cmd_vip(message: Message) -> None:
+    user = await db.get_user(message.from_user.id)  # type: ignore[union-attr]
+    lang = lang_of(user)
     await message.answer(
-        "👑 <b>VIP Plan</b>\n\n"
-        f"Price: <b>{settings.vip_price_stars} Telegram Stars</b>\n\n"
-        "Benefits:\n"
-        "• 🔥 Priority queue — always matched before Free and Premium users\n"
-        "• ⚡ Skip the wait — average match time under 10 seconds\n"
-        "• 👀 Access to a larger pool of active users\n\n"
-        f"Valid for {settings.subscription_days} days.",
+        t(
+            "vip_info",
+            lang,
+            vip_price=settings.vip_price_stars,
+            subscription_days=settings.subscription_days,
+        ),
         parse_mode="HTML",
         reply_markup=payment_keyboard(),
     )
 
 
-async def _send_invoice(bot: Bot, chat_id: int, plan: str) -> None:
+async def _send_invoice(bot: Bot, chat_id: int, plan: str, lang: str = "en") -> None:
+    """Send a Telegram Stars invoice for *plan* in the user's language."""
     info = _PLAN_INFO[plan]
+    title = t(f"{plan}_plan_title", lang)
+    description = t(f"{plan}_plan_description", lang)
     await bot.send_invoice(
         chat_id=chat_id,
-        title=info["title"],
-        description=info["description"].replace("<b>", "").replace("</b>", ""),
+        title=title,
+        description=description,
         payload=info["payload"],
         currency="XTR",                    # Telegram Stars currency code
-        prices=[LabeledPrice(label=info["title"], amount=info["price"])],
+        prices=[LabeledPrice(label=title, amount=info["price"])],
         provider_token="",                 # Empty string for Telegram Stars
     )
 
@@ -94,13 +93,17 @@ async def _send_invoice(bot: Bot, chat_id: int, plan: str) -> None:
 @router.callback_query(F.data == "buy_premium")
 async def cb_buy_premium(callback: CallbackQuery, bot: Bot) -> None:
     await callback.answer()
-    await _send_invoice(bot, callback.from_user.id, "premium")
+    user = await db.get_user(callback.from_user.id)
+    lang = lang_of(user)
+    await _send_invoice(bot, callback.from_user.id, "premium", lang)
 
 
 @router.callback_query(F.data == "buy_vip")
 async def cb_buy_vip(callback: CallbackQuery, bot: Bot) -> None:
     await callback.answer()
-    await _send_invoice(bot, callback.from_user.id, "vip")
+    user = await db.get_user(callback.from_user.id)
+    lang = lang_of(user)
+    await _send_invoice(bot, callback.from_user.id, "vip", lang)
 
 
 @router.pre_checkout_query()
@@ -116,13 +119,15 @@ async def successful_payment(message: Message) -> None:
     plan = payment.invoice_payload  # "premium" or "vip"
 
     expiry = datetime.now(timezone.utc) + timedelta(days=settings.subscription_days)
+    expiry_str = expiry.strftime("%Y-%m-%d")
+
+    user = await db.get_user(user_id)
+    lang = lang_of(user)
 
     if plan == "premium":
         await db.update_user(user_id, {"is_premium": True, "premium_expires": expiry})
         await message.answer(
-            "✅ <b>Premium activated!</b>\n\n"
-            "You can now set a gender preference with /search.\n"
-            f"Expires: {expiry.strftime('%Y-%m-%d')}",
+            t("premium_activated", lang, expiry=expiry_str),
             parse_mode="HTML",
             reply_markup=search_keyboard(),
         )
@@ -131,9 +136,7 @@ async def successful_payment(message: Message) -> None:
             user_id, {"is_vip": True, "is_premium": True, "vip_expires": expiry, "premium_expires": expiry}
         )
         await message.answer(
-            "✅ <b>VIP activated!</b>\n\n"
-            "You now have priority matching and gender filter.\n"
-            f"Expires: {expiry.strftime('%Y-%m-%d')}",
+            t("vip_activated", lang, expiry=expiry_str),
             parse_mode="HTML",
             reply_markup=search_keyboard(),
         )

@@ -172,3 +172,59 @@ async def set_abuse_cooldown(user_id: int, ttl_seconds: int = 300) -> None:
 
 async def is_in_abuse_cooldown(user_id: int) -> bool:
     return bool(await _r().exists(f"abuse:cooldown:{user_id}"))
+
+
+# ─── Watchdog (Fix #8: Soft failure recovery) ────────────────────────────────
+
+async def get_all_searching_users() -> list[int]:
+    """Return all user IDs currently in the matchmaking queue."""
+    members = await _r().zrange(QUEUE_KEY, 0, -1)
+    return [int(m) for m in members]
+
+
+async def get_search_start_time(user_id: int) -> float | None:
+    """Return the Unix timestamp when the user started searching, or None."""
+    val = await _r().get(f"user:search_start:{user_id}")
+    return float(val) if val else None
+
+
+# ─── Queue stats (Fix #7: Queue health monitor) ──────────────────────────────
+
+QUEUE_STATS_KEY = "queue:stats"
+
+
+async def update_queue_stats(stats: dict) -> None:
+    """Persist queue health stats as a Redis hash."""
+    await _r().hset(QUEUE_STATS_KEY, mapping={k: str(v) for k, v in stats.items()})
+    await _r().expire(QUEUE_STATS_KEY, 300)
+
+
+async def get_queue_stats() -> dict:
+    """Retrieve queue health stats."""
+    raw = await _r().hgetall(QUEUE_STATS_KEY)
+    result: dict = {}
+    for k, v in raw.items():
+        try:
+            result[k] = float(v)
+        except (ValueError, TypeError):
+            result[k] = v
+    return result
+
+
+# ─── Warm start context (Fix #10) ────────────────────────────────────────────
+
+async def set_warm_start(user_id: int, session_type: str, outcome: str) -> None:
+    pipe = _r().pipeline()
+    pipe.set(f"warm_start:type:{user_id}", session_type, ex=3600)
+    pipe.set(f"warm_start:outcome:{user_id}", outcome, ex=3600)
+    await pipe.execute()
+
+
+async def get_warm_start(user_id: int) -> dict | None:
+    pipe = _r().pipeline()
+    pipe.get(f"warm_start:type:{user_id}")
+    pipe.get(f"warm_start:outcome:{user_id}")
+    results = await pipe.execute()
+    if not results[0]:
+        return None
+    return {"session_type": results[0], "outcome": results[1]}

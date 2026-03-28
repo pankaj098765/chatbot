@@ -15,11 +15,16 @@ Frustration scoring (over last_5_results)
 
 Rules (evaluated in priority order)
 --------------------------------------
-1. total_searches <= 3   → MATCH_REAL  (new-user grace period)
+1. total_searches <= 3   → MATCH_REAL  (new-user grace period / Fix #4)
 2. frustration >= 5      → MATCH_REAL  (rescue frustrated user)
 3. last 2 == FAIL        → MATCH_REAL  (consecutive failure fix)
 4. >=4 GOOD in last 5    → 50% RETRY / 50% FALLBACK  (inject variety)
 5. Probabilistic default → 70% MATCH_REAL / 20% RETRY / 10% FALLBACK
+
+Churn Detection (Fix #3)
+------------------------------------------
+  Tracks last_3_session_durations.
+  If avg_session_duration < 20s → churn_risk = HIGH.
 """
 from __future__ import annotations
 
@@ -33,6 +38,9 @@ Action = Literal["MATCH_REAL", "RETRY", "FALLBACK"]
 
 _P_MATCH_REAL = 0.70
 _P_RETRY_CUTOFF = 0.90
+
+# Fix #3: Churn risk threshold (seconds)
+_CHURN_DURATION_THRESHOLD = 20.0
 
 
 def _calc_frustration(last_5: list[str]) -> int:
@@ -53,7 +61,7 @@ def decide_next_action(user: dict) -> Action:
     last_5: list[str] = user.get("last_5_results", [])
     frustration = _calc_frustration(last_5)
 
-    # Rule 1 — new-user grace period
+    # Rule 1 — new-user grace period (also satisfies Fix #4)
     if total <= 3:
         return "MATCH_REAL"
 
@@ -63,6 +71,10 @@ def decide_next_action(user: dict) -> Action:
 
     # Rule 3 — two consecutive failures
     if len(last_5) >= 2 and last_5[-1] == "FAIL" and last_5[-2] == "FAIL":
+        return "MATCH_REAL"
+
+    # Fix #3 — high churn risk: force a real high-quality match
+    if user.get("churn_risk") == "HIGH":
         return "MATCH_REAL"
 
     # Rule 4 — very satisfied user: inject variety to avoid monotony
@@ -80,7 +92,11 @@ def decide_next_action(user: dict) -> Action:
         return "FALLBACK"
 
 
-async def record_outcome(user_id: int, outcome: Outcome) -> None:
+async def record_outcome(
+    user_id: int,
+    outcome: Outcome,
+    session_duration: float | None = None,
+) -> None:
     """
     Persist a match outcome and recalculate the frustration score.
 
@@ -89,6 +105,7 @@ async def record_outcome(user_id: int, outcome: Outcome) -> None:
       - frustration_score
       - success_count (incremented on GOOD_CHAT)
       - total_searches (always incremented)
+      - last_3_session_durations + avg_session_duration + churn_risk (Fix #3)
     """
     user = await db.get_user(user_id)
     if not user:
@@ -109,5 +126,28 @@ async def record_outcome(user_id: int, outcome: Outcome) -> None:
     if outcome == "GOOD_CHAT":
         increments["success_count"] = 1
 
+    # Fix #3: Churn detection — track rolling window of last 3 session durations
+    if session_duration is not None:
+        durations: list[float] = list(user.get("last_3_session_durations", []))
+        durations.append(session_duration)
+        if len(durations) > 3:
+            durations = durations[-3:]
+        avg_dur = sum(durations) / len(durations)
+        churn_risk = "HIGH" if avg_dur < _CHURN_DURATION_THRESHOLD else "LOW"
+        updates["last_3_session_durations"] = durations
+        updates["avg_session_duration"] = avg_dur
+        updates["churn_risk"] = churn_risk
+
     await db.update_user(user_id, updates)
     await db.increment_user(user_id, increments)
+
+
+async def update_feedback_score(user_id: int, positive: bool) -> None:
+    """
+    Fix #1: Update feedback counters after a session rating.
+    These counters feed directly into the matchmaking priority score.
+    """
+    if positive:
+        await db.increment_user(user_id, {"positive_feedback_count": 1})
+    else:
+        await db.increment_user(user_id, {"negative_feedback_count": 1})

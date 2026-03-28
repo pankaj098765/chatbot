@@ -97,8 +97,12 @@ def _apply_typo(text: str) -> str:
 class BehaviorController:
     """Generates responses and delays for a simulated fallback partner."""
 
-    def __init__(self) -> None:
-        self._persona: Persona = self._select_persona()
+    def __init__(self, persona_name: str | None = None) -> None:
+        # Fix #5: Accept an explicit persona_name to support diversity control
+        self._persona: Persona = (
+            PERSONAS[persona_name] if persona_name and persona_name in PERSONAS
+            else self._select_persona()
+        )
         self._used_messages: set[str] = set()
         self._message_count: int = 0
 

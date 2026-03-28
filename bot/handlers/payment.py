@@ -52,9 +52,11 @@ async def cmd_pay(message: Message) -> None:
     await message.answer(
         "💳 <b>Choose a plan:</b>\n\n"
         f"⭐ <b>Premium</b> — {settings.premium_price_stars} Stars\n"
-        "  → Gender filter: match only males or females\n\n"
+        "  → Gender filter: match only males or females\n"
+        "  → 👀 <i>Premium unlocks more users in the pool</i>\n\n"
         f"👑 <b>VIP</b> — {settings.vip_price_stars} Stars\n"
-        "  → Priority queue: get matched faster\n\n"
+        "  → Priority queue: get matched faster\n"
+        "  → 🔥 <i>VIP users get faster matches — skip the wait</i>\n\n"
         "<i>Powered by Telegram Stars</i>",
         parse_mode="HTML",
         reply_markup=payment_keyboard(),
@@ -67,8 +69,9 @@ async def cmd_vip(message: Message) -> None:
         "👑 <b>VIP Plan</b>\n\n"
         f"Price: <b>{settings.vip_price_stars} Telegram Stars</b>\n\n"
         "Benefits:\n"
-        "• Priority queue — always matched before Free and Premium users\n"
-        "• Skip the wait — average match time under 10 seconds\n\n"
+        "• 🔥 Priority queue — always matched before Free and Premium users\n"
+        "• ⚡ Skip the wait — average match time under 10 seconds\n"
+        "• 👀 Access to a larger pool of active users\n\n"
         f"Valid for {settings.subscription_days} days.",
         parse_mode="HTML",
         reply_markup=payment_keyboard(),

@@ -1,5 +1,11 @@
 """
 bot/handlers/chat.py — Message relay + gender callback + post-session feedback.
+
+Fix #1:  Feedback handler now calls experience.update_feedback_score to update
+         the user's positive/negative feedback counters for priority scoring.
+Fix #9:  Incoming messages are scanned for gender-check intent ("m", "m?", etc.)
+         Users showing this intent get their priority reduced and are flagged
+         so they preferentially match with others doing the same.
 """
 from __future__ import annotations
 
@@ -12,9 +18,17 @@ from bot.database import redis_client as redis
 from bot.keyboards.inline import search_keyboard
 from bot.services import anti_abuse, experience
 from bot.services.analytics import track_feedback
+from bot.services.matchmaking import calc_priority_score
 from bot.utils.states import UserState
 
 router = Router()
+
+# Fix #9: Patterns that indicate the user is doing a gender check
+_GENDER_CHECK_PATTERNS = frozenset({
+    "m", "m?", "male?", "f", "f?", "female?",
+    "boy?", "girl?", "guy?", "asl", "asl?",
+    "male", "female",
+})
 
 
 # ─── Message relay ────────────────────────────────────────────────────────────
@@ -31,6 +45,16 @@ async def relay_message(message: Message, state: FSMContext, bot: Bot) -> None:
             "⚠️ You've been restricted for a short period due to policy violations."
         )
         return
+
+    # Fix #9: Intent detection — detect gender-check messages
+    normalized = text.strip().lower()
+    if normalized in _GENDER_CHECK_PATTERNS:
+        await db.update_user(user_id, {"intent": "gender_check"})
+        # Slightly deprioritise this user so gender-check users cluster together
+        user = await db.get_user(user_id)
+        if user:
+            new_score = calc_priority_score(user) - 15
+            await redis.add_to_queue(user_id, new_score)
 
     partner_id = await redis.get_partner(user_id)
     if not partner_id or partner_id < 0:
@@ -81,6 +105,9 @@ async def cb_feedback(callback: CallbackQuery) -> None:
     # Record outcome in experience engine
     outcome = "GOOD_CHAT" if rating == "good" else "BAD_CHAT"
     await experience.record_outcome(user_id, outcome)
+
+    # Fix #1: Update feedback counters for priority scoring
+    await experience.update_feedback_score(user_id, positive=(rating == "good"))
 
     await callback.message.edit_text(  # type: ignore[union-attr]
         "Thanks for your feedback! 🙏\n\nUse /search to find a new stranger.",

@@ -18,6 +18,8 @@ from aiogram.fsm.storage.memory import MemoryStorage
 from bot.config import settings
 from bot.database import mongodb, redis_client
 from bot.handlers import chat, payment, search, start
+from bot.services.retention_engine import run_watchdog
+from bot.services.queue_monitor import run_queue_monitor
 
 logging.basicConfig(
     level=logging.DEBUG if settings.debug else logging.INFO,
@@ -32,6 +34,9 @@ async def on_startup(bot: Bot) -> None:
     await mongodb.connect()
     logger.info("Connecting to Redis…")
     await redis_client.connect()
+    # Fix #7 & #8: Start background monitoring tasks
+    asyncio.create_task(run_watchdog(bot))
+    asyncio.create_task(run_queue_monitor())
     logger.info("Bot started.")
 
 

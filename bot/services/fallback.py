@@ -216,7 +216,6 @@ async def start_fallback_session(bot: Bot, user_id: int) -> None:
 
             messages = await controller.generate_response_async(
                 user_message=last_user_msg,
-                message_count=message_count,
             )
             # generate_response_async() may return an empty list (question-ignore)
             for i, msg in enumerate(messages):

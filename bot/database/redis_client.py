@@ -343,7 +343,11 @@ async def set_fallback_user_message(user_id: int, text: str) -> None:
 
 
 async def get_fallback_user_message(user_id: int) -> str:
-    """Return the last stored user message for a fallback session, or empty string."""
+    """Return the last stored user message for a fallback session.
+
+    Returns an empty string when no message has been stored, so callers
+    never receive None and a conditional check on truthiness is sufficient.
+    """
     val = await _r().get(f"fallback:last_msg:{user_id}")
     return val or ""
 

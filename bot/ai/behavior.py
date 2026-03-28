@@ -525,8 +525,6 @@ class BehaviorController:
     async def generate_response_async(
         self,
         user_message: str = "",
-        *,
-        message_count: int = 0,
     ) -> list[str]:
         """
         Async response generator with hybrid LLM + template decision logic.
@@ -536,18 +534,16 @@ class BehaviorController:
           40 % → use template system directly
 
         Cost-control guard — LLM is skipped when:
-          • message_count >= 10  (session no longer in early stage)
-          • LLM engine returns None (unavailable / API error)
+          • self._message_count >= 10  (session no longer in early stage)
+          • LLM engine returns None    (unavailable / API error)
 
-        On LLM failure the method seamlessly falls back to generate_response().
+        On LLM failure the method seamlessly falls back to the template system.
 
         Parameters
         ----------
         user_message:
             The most recent message sent by the human user.  Used as LLM
             context.  Pass "" when unavailable.
-        message_count:
-            Current message count in this session, for the cost-control guard.
         """
         self._message_count += 1
 
@@ -568,10 +564,11 @@ class BehaviorController:
         # ── Hybrid LLM / template decision ───────────────────────────────────
         # Cost-control: LLM is only worthwhile in the early stage (first 10 msgs)
         # where engagement is highest and impression matters most.
+        # self._message_count is already incremented above, so <= 10 covers msgs 1-10.
         use_llm = (
             random.random() < 0.60          # 60 % probability gate
-            and message_count < 10          # early session stage
-            and user_message                # only when we have context
+            and self._message_count <= 10   # early session stage
+            and user_message                # only when we have user context
         )
 
         if use_llm:

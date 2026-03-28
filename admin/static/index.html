@@ -1,0 +1,614 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Anonymous Chat Bot — Admin Dashboard</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:       #0f1117;
+      --surface:  #1a1d27;
+      --border:   #2c2f3e;
+      --accent:   #4f8ef7;
+      --accent2:  #7c3aed;
+      --success:  #22c55e;
+      --warning:  #f59e0b;
+      --danger:   #ef4444;
+      --text:     #e2e8f0;
+      --muted:    #64748b;
+      --radius:   12px;
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      min-height: 100vh;
+    }
+
+    /* ── Header ── */
+    header {
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 16px 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+    header h1 { font-size: 1.25rem; font-weight: 700; letter-spacing: -0.02em; }
+    header h1 span { color: var(--accent); }
+
+    /* ── Auth bar ── */
+    .auth-bar {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+    }
+    .auth-bar input {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      color: var(--text);
+      border-radius: 8px;
+      padding: 8px 12px;
+      font-size: 0.85rem;
+      width: 240px;
+    }
+    .auth-bar input:focus { outline: none; border-color: var(--accent); }
+    .badge {
+      font-size: 0.75rem;
+      padding: 4px 10px;
+      border-radius: 99px;
+      font-weight: 600;
+    }
+    .badge.connected    { background: #14532d; color: var(--success); }
+    .badge.disconnected { background: #450a0a; color: var(--danger); }
+
+    /* ── Main layout ── */
+    main { padding: 24px; max-width: 1200px; margin: 0 auto; }
+
+    /* ── Section titles ── */
+    .section-title {
+      font-size: 0.75rem;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: 14px;
+      margin-top: 32px;
+    }
+    .section-title:first-child { margin-top: 0; }
+
+    /* ── Stat cards ── */
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+      gap: 16px;
+    }
+    .stat-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 20px;
+    }
+    .stat-card .label {
+      font-size: 0.75rem;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      margin-bottom: 8px;
+    }
+    .stat-card .value {
+      font-size: 2rem;
+      font-weight: 700;
+      line-height: 1;
+    }
+    .stat-card .unit {
+      font-size: 0.8rem;
+      color: var(--muted);
+      margin-top: 4px;
+    }
+    .stat-card.accent  .value { color: var(--accent); }
+    .stat-card.success .value { color: var(--success); }
+    .stat-card.warning .value { color: var(--warning); }
+    .stat-card.danger  .value { color: var(--danger); }
+    .stat-card.purple  .value { color: #a78bfa; }
+
+    /* ── Gender ratio mini-bar ── */
+    .gender-bar-wrap { margin-top: 8px; }
+    .gender-bar {
+      height: 6px;
+      border-radius: 99px;
+      background: var(--border);
+      overflow: hidden;
+      position: relative;
+    }
+    .gender-bar-fill {
+      height: 100%;
+      background: linear-gradient(90deg, var(--accent) 0%, #a78bfa 100%);
+      border-radius: 99px;
+      transition: width 0.5s ease;
+    }
+    .gender-bar-labels {
+      display: flex;
+      justify-content: space-between;
+      font-size: 0.7rem;
+      color: var(--muted);
+      margin-top: 4px;
+    }
+
+    /* ── Config panel ── */
+    .config-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+      gap: 16px;
+    }
+    .config-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 20px;
+    }
+    .config-card .cfg-label {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 12px;
+    }
+    .config-card .cfg-name {
+      font-size: 0.875rem;
+      font-weight: 600;
+    }
+    .config-card .cfg-value {
+      font-size: 0.875rem;
+      font-weight: 700;
+      color: var(--accent);
+      min-width: 36px;
+      text-align: right;
+    }
+    .config-card .cfg-desc {
+      font-size: 0.75rem;
+      color: var(--muted);
+      margin-bottom: 14px;
+    }
+
+    /* ── Slider ── */
+    input[type="range"] {
+      -webkit-appearance: none;
+      width: 100%;
+      height: 4px;
+      border-radius: 99px;
+      background: var(--border);
+      outline: none;
+      cursor: pointer;
+    }
+    input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      background: var(--accent);
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+    input[type="range"]::-webkit-slider-thumb:hover { background: #6aa3ff; }
+
+    /* ── Toggle switch ── */
+    .toggle-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-top: 10px;
+    }
+    .toggle-row .toggle-label { font-size: 0.8rem; color: var(--muted); }
+    .toggle {
+      position: relative;
+      width: 38px;
+      height: 22px;
+    }
+    .toggle input { opacity: 0; width: 0; height: 0; }
+    .slider-knob {
+      position: absolute;
+      inset: 0;
+      background: var(--border);
+      border-radius: 99px;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+    .slider-knob::before {
+      content: "";
+      position: absolute;
+      height: 16px;
+      width: 16px;
+      left: 3px;
+      top: 3px;
+      background: var(--muted);
+      border-radius: 50%;
+      transition: transform 0.2s, background 0.2s;
+    }
+    .toggle input:checked + .slider-knob { background: #1e3a5f; }
+    .toggle input:checked + .slider-knob::before {
+      transform: translateX(16px);
+      background: var(--accent);
+    }
+
+    /* ── Apply button ── */
+    .apply-btn {
+      margin-top: 28px;
+      width: 100%;
+      padding: 12px;
+      border: none;
+      border-radius: 8px;
+      background: var(--accent);
+      color: #fff;
+      font-size: 0.9rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.2s, opacity 0.2s;
+    }
+    .apply-btn:hover { background: #3a7de0; }
+    .apply-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+    /* ── Status / toast ── */
+    #toast {
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      padding: 12px 20px;
+      border-radius: 10px;
+      font-size: 0.875rem;
+      font-weight: 600;
+      display: none;
+      z-index: 999;
+      animation: fadeIn 0.2s ease;
+    }
+    #toast.success { background: #14532d; color: var(--success); }
+    #toast.error   { background: #450a0a; color: var(--danger); }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; } }
+
+    /* ── Refresh row ── */
+    .refresh-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 14px;
+    }
+    .refresh-row .live-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--success);
+      animation: pulse 2s infinite;
+    }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.3; }
+    }
+    .refresh-row span { font-size: 0.8rem; color: var(--muted); }
+    .refresh-btn {
+      background: none;
+      border: 1px solid var(--border);
+      color: var(--text);
+      border-radius: 8px;
+      padding: 6px 14px;
+      font-size: 0.8rem;
+      cursor: pointer;
+      transition: border-color 0.2s;
+    }
+    .refresh-btn:hover { border-color: var(--accent); color: var(--accent); }
+
+    /* ── Loading skeleton ── */
+    .loading { color: var(--muted); font-size: 1.5rem; }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>🤖 <span>Anonymous Chat Bot</span> &mdash; Admin Dashboard</h1>
+  <div class="auth-bar">
+    <input type="password" id="tokenInput" placeholder="Admin Token" autocomplete="off" />
+    <span class="badge disconnected" id="authBadge">Not connected</span>
+  </div>
+</header>
+
+<main>
+  <!-- ── Live Stats ── -->
+  <div class="refresh-row">
+    <div class="live-dot"></div>
+    <span id="lastUpdated">Waiting for token…</span>
+    <button class="refresh-btn" onclick="fetchStats()">↻ Refresh</button>
+  </div>
+
+  <p class="section-title">📊 System Stats</p>
+  <div class="stats-grid">
+    <div class="stat-card accent">
+      <div class="label">Active Users</div>
+      <div class="value loading" id="s-active">—</div>
+      <div class="unit">last 24 h</div>
+    </div>
+    <div class="stat-card warning">
+      <div class="label">Users in Queue</div>
+      <div class="value loading" id="s-queue">—</div>
+      <div class="unit">right now</div>
+    </div>
+    <div class="stat-card success">
+      <div class="label">Match Success Rate</div>
+      <div class="value loading" id="s-match">—</div>
+      <div class="unit">% last hour</div>
+    </div>
+    <div class="stat-card">
+      <div class="label">Avg Wait Time</div>
+      <div class="value loading" id="s-wait">—</div>
+      <div class="unit">seconds</div>
+    </div>
+    <div class="stat-card purple">
+      <div class="label">Fallback Usage</div>
+      <div class="value loading" id="s-fallback">—</div>
+      <div class="unit">% of sessions</div>
+    </div>
+    <div class="stat-card">
+      <div class="label">Gender Ratio</div>
+      <div class="value loading" id="s-gender-text">—</div>
+      <div class="gender-bar-wrap">
+        <div class="gender-bar"><div class="gender-bar-fill" id="s-gender-bar" style="width:50%"></div></div>
+        <div class="gender-bar-labels"><span id="g-male">M 0</span><span id="g-female">F 0</span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Config Controls ── -->
+  <p class="section-title">⚙️ Config Controls</p>
+  <div class="config-grid">
+
+    <div class="config-card">
+      <div class="cfg-label">
+        <span class="cfg-name">Fallback Rate</span>
+        <span class="cfg-value" id="v-fallback_rate">0.10</span>
+      </div>
+      <div class="cfg-desc">Probability of routing a user to an AI fallback partner instead of a real user. (0 = never, 1 = always)</div>
+      <input type="range" id="r-fallback_rate" min="0" max="1" step="0.01" value="0.10"
+             oninput="syncSlider('fallback_rate', this.value)" />
+      <div class="toggle-row">
+        <span class="toggle-label">Enable fallback</span>
+        <label class="toggle">
+          <input type="checkbox" id="t-fallback_rate" checked onchange="toggleFromSwitch('fallback_rate', this)" />
+          <span class="slider-knob"></span>
+        </label>
+      </div>
+    </div>
+
+    <div class="config-card">
+      <div class="cfg-label">
+        <span class="cfg-name">Retry Limit</span>
+        <span class="cfg-value" id="v-retry_limit">3</span>
+      </div>
+      <div class="cfg-desc">Maximum number of matchmaking attempts before routing to fallback. (1–10)</div>
+      <input type="range" id="r-retry_limit" min="1" max="10" step="1" value="3"
+             oninput="syncSlider('retry_limit', this.value)" />
+    </div>
+
+    <div class="config-card">
+      <div class="cfg-label">
+        <span class="cfg-name">Priority Boost</span>
+        <span class="cfg-value" id="v-priority_boost">0</span>
+      </div>
+      <div class="cfg-desc">Flat priority score added to every user when enqueuing. Useful to accelerate matching globally. (0–200)</div>
+      <input type="range" id="r-priority_boost" min="0" max="200" step="5" value="0"
+             oninput="syncSlider('priority_boost', this.value)" />
+      <div class="toggle-row">
+        <span class="toggle-label">Apply boost</span>
+        <label class="toggle">
+          <input type="checkbox" id="t-priority_boost" onchange="toggleBoost(this)" />
+          <span class="slider-knob"></span>
+        </label>
+      </div>
+    </div>
+
+    <div class="config-card">
+      <div class="cfg-label">
+        <span class="cfg-name">Randomness Level</span>
+        <span class="cfg-value" id="v-randomness_level">0.50</span>
+      </div>
+      <div class="cfg-desc">Controls response delay variance and AI behaviour spread. Low = predictable, High = lively. (0–1)</div>
+      <input type="range" id="r-randomness_level" min="0" max="1" step="0.05" value="0.5"
+             oninput="syncSlider('randomness_level', this.value)" />
+      <div class="toggle-row">
+        <span class="toggle-label">High variance mode</span>
+        <label class="toggle">
+          <input type="checkbox" id="t-randomness_high" onchange="toggleHighVariance(this)" />
+          <span class="slider-knob"></span>
+        </label>
+      </div>
+    </div>
+
+  </div>
+
+  <button class="apply-btn" id="applyBtn" onclick="applyConfig()">Apply Configuration</button>
+</main>
+
+<div id="toast"></div>
+
+<script>
+  // ── State ────────────────────────────────────────────────────────────────────
+  const REFRESH_INTERVAL_MS = 7000; // auto-refresh interval for live stats (ms)
+  let adminToken = '';
+  let refreshInterval = null;
+  let configDraft = {};
+
+  // ── Auth ─────────────────────────────────────────────────────────────────────
+  const tokenInput = document.getElementById('tokenInput');
+  tokenInput.addEventListener('change', () => {
+    adminToken = tokenInput.value.trim();
+    if (adminToken) {
+      fetchStats();
+      fetchConfig();
+      startAutoRefresh();
+    }
+  });
+
+  // ── Auto-refresh ──────────────────────────────────────────────────────────────
+  function startAutoRefresh() {
+    if (refreshInterval) clearInterval(refreshInterval);
+    refreshInterval = setInterval(() => {
+      fetchStats();
+    }, REFRESH_INTERVAL_MS);
+  }
+
+  // ── Fetch helpers ─────────────────────────────────────────────────────────────
+  async function apiFetch(path, options = {}) {
+    const headers = { 'Authorization': 'Bearer ' + adminToken, 'Content-Type': 'application/json' };
+    const res = await fetch(path, { ...options, headers });
+    if (!res.ok) throw new Error(await res.text());
+    return res.json();
+  }
+
+  // ── Stats ─────────────────────────────────────────────────────────────────────
+  async function fetchStats() {
+    if (!adminToken) return;
+    try {
+      const data = await apiFetch('/admin/stats');
+      document.getElementById('authBadge').className = 'badge connected';
+      document.getElementById('authBadge').textContent = 'Connected';
+      updateStats(data);
+      document.getElementById('lastUpdated').textContent =
+        'Last updated: ' + new Date().toLocaleTimeString();
+    } catch (e) {
+      document.getElementById('authBadge').className = 'badge disconnected';
+      document.getElementById('authBadge').textContent = 'Auth failed';
+      document.getElementById('lastUpdated').textContent = 'Error: ' + e.message;
+    }
+  }
+
+  function updateStats(d) {
+    setText('s-active',   d.active_users);
+    setText('s-queue',    d.users_in_queue);
+    setText('s-match',    d.match_success_rate.toFixed(1) + '%');
+    setText('s-wait',     d.avg_wait_time.toFixed(1) + 's');
+    setText('s-fallback', d.fallback_usage_rate.toFixed(1) + '%');
+
+    const gr = d.gender_ratio;
+    const male   = gr.male   || 0;
+    const female = gr.female || 0;
+    const total  = male + female || 1;
+    const malePct = Math.round(male / total * 100);
+
+    setText('s-gender-text', male + 'M / ' + female + 'F');
+    document.getElementById('s-gender-bar').style.width = malePct + '%';
+    document.getElementById('g-male').textContent   = 'M ' + male;
+    document.getElementById('g-female').textContent = 'F ' + female;
+  }
+
+  function setText(id, val) {
+    const el = document.getElementById(id);
+    if (el) { el.textContent = val; el.classList.remove('loading'); }
+  }
+
+  // ── Config ────────────────────────────────────────────────────────────────────
+  async function fetchConfig() {
+    if (!adminToken) return;
+    try {
+      const cfg = await apiFetch('/admin/config');
+      applyConfigToUI(cfg);
+    } catch (_) {}
+  }
+
+  function applyConfigToUI(cfg) {
+    ['fallback_rate', 'retry_limit', 'priority_boost', 'randomness_level'].forEach(key => {
+      const val = cfg[key] !== undefined ? cfg[key] : null;
+      if (val === null) return;
+      const slider = document.getElementById('r-' + key);
+      const label  = document.getElementById('v-' + key);
+      if (slider) slider.value = val;
+      if (label)  label.textContent = formatVal(key, val);
+      configDraft[key] = val;
+    });
+
+    // Sync toggle states
+    const frSlider = parseFloat(document.getElementById('r-fallback_rate').value);
+    document.getElementById('t-fallback_rate').checked = frSlider > 0;
+
+    const pb = parseFloat(document.getElementById('r-priority_boost').value);
+    document.getElementById('t-priority_boost').checked = pb > 0;
+
+    const rl = parseFloat(document.getElementById('r-randomness_level').value);
+    document.getElementById('t-randomness_high').checked = rl >= 0.65;
+  }
+
+  // ── Slider sync ───────────────────────────────────────────────────────────────
+  function syncSlider(key, rawVal) {
+    const val = parseFloat(rawVal);
+    document.getElementById('v-' + key).textContent = formatVal(key, val);
+    configDraft[key] = val;
+
+    if (key === 'fallback_rate') {
+      document.getElementById('t-fallback_rate').checked = val > 0;
+    }
+    if (key === 'priority_boost') {
+      document.getElementById('t-priority_boost').checked = val > 0;
+    }
+    if (key === 'randomness_level') {
+      document.getElementById('t-randomness_high').checked = val >= 0.65;
+    }
+  }
+
+  function formatVal(key, val) {
+    if (key === 'retry_limit' || key === 'priority_boost') return parseInt(val);
+    return parseFloat(val).toFixed(2);
+  }
+
+  // ── Toggle helpers ────────────────────────────────────────────────────────────
+  function toggleFromSwitch(key, checkbox) {
+    if (key === 'fallback_rate') {
+      const newVal = checkbox.checked ? 0.10 : 0.0;
+      document.getElementById('r-fallback_rate').value = newVal;
+      syncSlider('fallback_rate', newVal);
+    }
+  }
+
+  function toggleBoost(checkbox) {
+    const newVal = checkbox.checked ? 30 : 0;
+    document.getElementById('r-priority_boost').value = newVal;
+    syncSlider('priority_boost', newVal);
+  }
+
+  function toggleHighVariance(checkbox) {
+    const newVal = checkbox.checked ? 0.70 : 0.30;
+    document.getElementById('r-randomness_level').value = newVal;
+    syncSlider('randomness_level', newVal);
+  }
+
+  // ── Apply config ──────────────────────────────────────────────────────────────
+  async function applyConfig() {
+    if (!adminToken) { showToast('Enter admin token first', 'error'); return; }
+    const btn = document.getElementById('applyBtn');
+    btn.disabled = true;
+    btn.textContent = 'Applying…';
+    try {
+      const updated = await apiFetch('/admin/config/update', {
+        method: 'POST',
+        body: JSON.stringify(configDraft),
+      });
+      applyConfigToUI(updated);
+      showToast('Configuration applied ✓', 'success');
+    } catch (e) {
+      showToast('Error: ' + e.message, 'error');
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'Apply Configuration';
+    }
+  }
+
+  // ── Toast ─────────────────────────────────────────────────────────────────────
+  function showToast(msg, type) {
+    const t = document.getElementById('toast');
+    t.textContent = msg;
+    t.className = type;
+    t.style.display = 'block';
+    setTimeout(() => { t.style.display = 'none'; }, 3000);
+  }
+</script>
+</body>
+</html>

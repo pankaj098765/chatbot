@@ -10,6 +10,18 @@ services:
       - redis
       - mongo
 
+  admin:
+    build: .
+    restart: always
+    command: python -m admin.main
+    env_file:
+      - .env
+    ports:
+      - "8000:8000"
+    depends_on:
+      - redis
+      - mongo
+
   redis:
     image: redis:alpine
     restart: always

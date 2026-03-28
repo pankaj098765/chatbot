@@ -63,6 +63,20 @@ _LANG_NAMES: dict[str, str] = {
 }
 
 
+# Well-known mixed-language blend names for the LLM prompt
+_MIX_NAMES: dict[str, str] = {
+    "hi": "Hinglish",
+    "es": "Spanglish",
+    "fr": "Franglais",
+    "de": "Denglisch",
+    "pt": "Portuñol",
+    "ar": "Arabizi",
+    "ru": "Runglish",
+    "tr": "Türklish",
+    "id": "Bahasa-English mix",
+}
+
+
 def _build_language_instruction(native_language: str, language_mode: str) -> str:
     """# UPDATED
     Return the language/style instruction block injected into the system prompt
@@ -72,9 +86,22 @@ def _build_language_instruction(native_language: str, language_mode: str) -> str
     -----
     english  → always respond in English regardless of native_language
     native   → respond entirely in native_language (no English mixing)
-    mixed    → mix English with native_language (e.g. Hinglish for hi, Spanglish for es)
+    mixed    → mix English with native_language (dynamic blend name per language)
     """
+    from bot.i18n.languages import SUPPORTED_LANGUAGES  # lazy — avoid circular
+
     lang_name = _LANG_NAMES.get(native_language, native_language.upper())
+
+    # Fallback to English for unsupported language codes
+    if native_language not in SUPPORTED_LANGUAGES and native_language != "en":
+        logger.warning(
+            "_build_language_instruction: unsupported native_language=%r, "
+            "falling back to English",
+            native_language,
+        )
+        native_language = "en"
+        language_mode = "english"
+        lang_name = "English"
 
     if language_mode == "english":
         return (
@@ -86,21 +113,18 @@ def _build_language_instruction(native_language: str, language_mode: str) -> str
             f"Language: {lang_name}\n"
             f"Style: Respond entirely in {lang_name}. Do NOT mix in English words.\n"
         )
-    # default: mixed
+    # mixed
     if native_language == "en":
-        # mixed + English is just plain English
         return (
             "Language: English\n"
             "Style: Respond in natural casual English.\n"
         )
-    mix_name = (
-        "Hinglish" if native_language == "hi"
-        else f"{lang_name}-English"
-    )
+    mix_name = _MIX_NAMES.get(native_language, f"{lang_name}-English")
     return (
-        f"Language: {lang_name} + English mix\n"
-        f"Style: Use a natural mix of English and {lang_name} (e.g. {mix_name}). "
-        "Switch naturally between the two languages mid-sentence.\n"
+        f"Language: {lang_name} + English mix ({mix_name})\n"
+        f"Style: Use a natural conversational mix of English and {lang_name}, "
+        f"switching between the two mid-sentence the way {mix_name} speakers do. "
+        "Keep it casual and realistic.\n"
     )
 
 

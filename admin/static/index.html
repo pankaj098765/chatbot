@@ -442,10 +442,24 @@
         <span class="cfg-name">Native Language</span>
         <span class="cfg-value" id="v-native_language">en</span>
       </div>
-      <div class="cfg-desc">ISO 639-1 code for the native language used when Language Mode is "native" or "mixed". Examples: <b>hi</b> (Hindi), <b>es</b> (Spanish), <b>fr</b> (French), <b>ar</b> (Arabic).</div>
-      <input type="text" id="i-native_language" placeholder="e.g. hi, es, fr" maxlength="3"
-             style="width:100%;padding:8px;border-radius:8px;background:var(--bg);color:var(--text);border:1px solid var(--border);margin-top:8px;font-size:0.9rem;"
-             oninput="syncTextInput('native_language', this.value.trim().toLowerCase())" />
+      <div class="cfg-desc">Language used when Mode is "native" or "mixed" (e.g. Hinglish, Spanglish, Franglais).</div>
+      <input type="text" id="native_lang_search" placeholder="🔍 Search language…"
+             style="width:100%;padding:7px 10px;border-radius:8px;background:var(--bg);color:var(--text);border:1px solid var(--border);margin-top:8px;font-size:0.85rem;"
+             oninput="filterNativeLang(this.value)" />
+      <select id="s-native_language" size="5"
+              style="width:100%;margin-top:6px;border-radius:8px;background:var(--bg);color:var(--text);border:1px solid var(--border);font-size:0.85rem;padding:4px;"
+              onchange="syncSelect('native_language', this.value)">
+        <option value="en">🇬🇧 English (en)</option>
+        <option value="hi">🇮🇳 हिंदी — Hindi (hi)</option>
+        <option value="es">🇪🇸 Español — Spanish (es)</option>
+        <option value="fr">🇫🇷 Français — French (fr)</option>
+        <option value="de">🇩🇪 Deutsch — German (de)</option>
+        <option value="pt">🇧🇷 Português — Portuguese (pt)</option>
+        <option value="ar">🇸🇦 العربية — Arabic (ar)</option>
+        <option value="ru">🇷🇺 Русский — Russian (ru)</option>
+        <option value="tr">🇹🇷 Türkçe — Turkish (tr)</option>
+        <option value="id">🇮🇩 Bahasa Indonesia (id)</option>
+      </select>
     </div>
 
   </div>
@@ -576,10 +590,10 @@
       configDraft['language_mode'] = cfg.language_mode;
     }
 
-    // UPDATED: sync native_language text input
+    // UPDATED: sync native_language dropdown
     if (cfg.native_language) {
-      const inp = document.getElementById('i-native_language');
-      if (inp) inp.value = cfg.native_language;
+      const sel = document.getElementById('s-native_language');
+      if (sel) sel.value = cfg.native_language;
       const lbl = document.getElementById('v-native_language');
       if (lbl) lbl.textContent = cfg.native_language;
       configDraft['native_language'] = cfg.native_language;
@@ -636,11 +650,15 @@
     configDraft[key] = val;
   }
 
-  // UPDATED: sync text input config fields
-  function syncTextInput(key, val) {
-    const lbl = document.getElementById('v-' + key);
-    if (lbl) lbl.textContent = val || '—';
-    configDraft[key] = val;
+  // UPDATED: filter native language dropdown by search text
+  function filterNativeLang(query) {
+    const sel = document.getElementById('s-native_language');
+    if (!sel) return;
+    const q = query.trim().toLowerCase();
+    Array.from(sel.options).forEach(opt => {
+      const visible = !q || opt.text.toLowerCase().includes(q) || opt.value.toLowerCase().includes(q);
+      opt.style.display = visible ? '' : 'none';
+    });
   }
 
   // ── Apply config ──────────────────────────────────────────────────────────────

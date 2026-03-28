@@ -10,6 +10,7 @@ from pydantic import BaseModel, field_validator
 
 from admin.auth import require_admin
 from admin.database import redis_client
+from bot.i18n.languages import SUPPORTED_LANGUAGES
 from config.app_config import app_config
 
 router = APIRouter()
@@ -63,9 +64,16 @@ class ConfigUpdate(BaseModel):
     @field_validator("native_language")
     @classmethod
     def validate_native_language(cls, v: str | None) -> str | None:
-        if v is not None and (not v.isalpha() or not (2 <= len(v) <= 3)):
-            raise ValueError("native_language must be a valid ISO 639-1 language code (2-3 letters)")
-        return v.lower() if v else v
+        if v is None:
+            return v
+        v = v.strip().lower()
+        if v not in SUPPORTED_LANGUAGES:
+            supported = ", ".join(sorted(SUPPORTED_LANGUAGES.keys()))
+            raise ValueError(
+                f"native_language '{v}' is not supported. "
+                f"Must be one of: {supported}"
+            )
+        return v
 
 
 @router.get("/config", dependencies=[Depends(require_admin)])

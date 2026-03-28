@@ -695,11 +695,18 @@ class BehaviorController:
             return [tc]
 
         # ── Hybrid LLM / template decision ───────────────────────────────────
-        # Cost-control: LLM is only worthwhile in the early stage (first 10 msgs)
-        # where engagement is highest and impression matters most.
-        # self._message_count is already incremented above, so <= 10 covers msgs 1-10.
+        # Cost-control: LLM is only worthwhile in the early stage (first 10 msgs).
+        # For non-Hinglish native/mixed modes, boost LLM probability to 90% so
+        # the LLM handles language-specific output (Spanglish, Franglais, etc.)
+        # rather than falling back to generic English templates.
+        _is_non_english_mode = (
+            self._language_mode in ("native", "mixed")
+            and self._native_language != "en"
+            and not self._use_hinglish   # Hinglish has its own template pools
+        )
+        _llm_prob = 0.90 if _is_non_english_mode else 0.60
         use_llm = (
-            random.random() < 0.60          # 60 % probability gate
+            random.random() < _llm_prob     # probability gate (boosted for non-hi modes)
             and self._message_count <= 10   # early session stage
             and user_message                # only when we have user context
         )

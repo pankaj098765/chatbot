@@ -86,20 +86,28 @@ async def get_ui_lang() -> str:
     (Redis) so changes take effect immediately without a restart.
 
     Logic:
-      language_mode == "english" → return "en"
-      language_mode == "native"  → return native_language
-      language_mode == "mixed"   → return native_language  (UI mirrors native)
+      language_mode == "english"            → return "en"
+      language_mode == "native" or "mixed"  → return native_language
+                                              (falls back to "en" if unsupported)
 
     Falls back to "en" on any error so the bot always has a safe default.
     """
     try:
         from bot.services import admin_control  # lazy import — avoids circular deps
+        from bot.i18n.languages import SUPPORTED_LANGUAGES
         config = await admin_control.get_config()
         language_mode = str(config.get("language_mode", "english"))
         native_language = str(config.get("native_language", "en"))
         if language_mode == "english":
             return "en"
-        return native_language or "en"
+        # Validate against supported list — fallback to English if unknown
+        if native_language not in SUPPORTED_LANGUAGES:
+            logger.warning(
+                "get_ui_lang: unsupported native_language=%r, falling back to 'en'",
+                native_language,
+            )
+            return "en"
+        return native_language
     except Exception:
         return "en"
 

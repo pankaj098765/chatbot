@@ -25,7 +25,7 @@ from aiogram import Bot
 
 from bot.database import mongodb as db
 from bot.database import redis_client as redis
-from bot.i18n import lang_of, t
+from bot.i18n import get_ui_lang, t
 from bot.utils.helpers import generate_session_id
 
 _FALLBACK_PARTNER_ID = -1
@@ -214,8 +214,7 @@ async def end_session(
 
     # Feature 4: Send post-session exit experience message
     if bot is not None:
-        user_doc = await db.get_user(user_id)
-        lang = lang_of(user_doc)
+        lang = await get_ui_lang()
         await send_exit_experience(bot, user_id, quality, lang)
 
     return session_id

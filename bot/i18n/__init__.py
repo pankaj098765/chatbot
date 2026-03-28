@@ -60,7 +60,7 @@ def t(key: str, lang: str = "en", **kwargs: object) -> str:
 
     Examples::
 
-        t("welcome_message", "hi")
+        t("welcome_message", lang, app_name=app_config.brand_name)
         t("premium_button", lang, price=100)
         t("vip_info", lang, vip_price=250, subscription_days=30)
     """
@@ -78,16 +78,37 @@ def t(key: str, lang: str = "en", **kwargs: object) -> str:
     return text
 
 
-def lang_of(user: dict | None) -> str:
-    """# NEW
-    Extract the ``ui_language`` from a user document, defaulting to ``"en"``.
+async def get_ui_lang() -> str:
+    """# UPDATED
+    Return the global UI language determined entirely by admin configuration.
 
-    Usage::
+    Reads language_mode and native_language from the admin runtime config
+    (Redis) so changes take effect immediately without a restart.
 
-        user = await db.get_user(user_id)
-        lang = lang_of(user)
-        await message.answer(t("welcome_message", lang))
+    Logic:
+      language_mode == "english" → return "en"
+      language_mode == "native"  → return native_language
+      language_mode == "mixed"   → return native_language  (UI mirrors native)
+
+    Falls back to "en" on any error so the bot always has a safe default.
     """
-    if not user:
+    try:
+        from bot.services import admin_control  # lazy import — avoids circular deps
+        config = await admin_control.get_config()
+        language_mode = str(config.get("language_mode", "english"))
+        native_language = str(config.get("native_language", "en"))
+        if language_mode == "english":
+            return "en"
+        return native_language or "en"
+    except Exception:
         return "en"
-    return user.get("ui_language") or "en"
+
+
+def lang_of(user: dict | None) -> str:
+    """# DEPRECATED — use ``await get_ui_lang()`` instead.
+
+    Previously extracted ui_language from a user document.  Language is now
+    admin-controlled globally; this function is kept only for any call sites
+    not yet migrated and always returns the safe English fallback.
+    """
+    return "en"

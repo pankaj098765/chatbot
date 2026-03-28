@@ -64,11 +64,8 @@ async def create_user(user_id: int, username: str | None = None) -> dict:
         "user_id": user_id,
         "username": username,
         "gender": None,          # "male" | "female" | None
-        "language": "en",
-        # UPDATED: language preference fields
-        "ui_language": "en",     # ISO 639-1 code for bot UI messages
-        "chat_language": "en",   # ISO 639-1 code for chat/LLM language
-        "chat_mode": "mixed",    # "english" | "native" | "mixed"
+        # REMOVED: ui_language, chat_language, chat_mode — language is now
+        # admin-controlled globally via language_mode + native_language config.
         "is_premium": False,
         "is_vip": False,
         "premium_expires": None,

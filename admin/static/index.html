@@ -424,6 +424,30 @@
       </div>
     </div>
 
+    <div class="config-card">
+      <div class="cfg-label">
+        <span class="cfg-name">Language Mode</span>
+        <span class="cfg-value" id="v-language_mode">english</span>
+      </div>
+      <div class="cfg-desc">Controls how the entire bot speaks to ALL users. <b>english</b> = English only · <b>native</b> = Native language only · <b>mixed</b> = Mixed (e.g. Hinglish, Spanglish)</div>
+      <select id="s-language_mode" style="width:100%;padding:8px;border-radius:8px;background:var(--bg);color:var(--text);border:1px solid var(--border);margin-top:8px;" onchange="syncSelect('language_mode', this.value)">
+        <option value="english">English only</option>
+        <option value="native">Native language only</option>
+        <option value="mixed">Mixed (English + Native)</option>
+      </select>
+    </div>
+
+    <div class="config-card">
+      <div class="cfg-label">
+        <span class="cfg-name">Native Language</span>
+        <span class="cfg-value" id="v-native_language">en</span>
+      </div>
+      <div class="cfg-desc">ISO 639-1 code for the native language used when Language Mode is "native" or "mixed". Examples: <b>hi</b> (Hindi), <b>es</b> (Spanish), <b>fr</b> (French), <b>ar</b> (Arabic).</div>
+      <input type="text" id="i-native_language" placeholder="e.g. hi, es, fr" maxlength="3"
+             style="width:100%;padding:8px;border-radius:8px;background:var(--bg);color:var(--text);border:1px solid var(--border);margin-top:8px;font-size:0.9rem;"
+             oninput="syncTextInput('native_language', this.value.trim().toLowerCase())" />
+    </div>
+
   </div>
 
   <button class="apply-btn" id="applyBtn" onclick="applyConfig()">Apply Configuration</button>
@@ -542,6 +566,24 @@
 
     const rl = parseFloat(document.getElementById('r-randomness_level').value);
     document.getElementById('t-randomness_high').checked = rl >= 0.65;
+
+    // UPDATED: sync language_mode select
+    if (cfg.language_mode) {
+      const sel = document.getElementById('s-language_mode');
+      if (sel) sel.value = cfg.language_mode;
+      const lbl = document.getElementById('v-language_mode');
+      if (lbl) lbl.textContent = cfg.language_mode;
+      configDraft['language_mode'] = cfg.language_mode;
+    }
+
+    // UPDATED: sync native_language text input
+    if (cfg.native_language) {
+      const inp = document.getElementById('i-native_language');
+      if (inp) inp.value = cfg.native_language;
+      const lbl = document.getElementById('v-native_language');
+      if (lbl) lbl.textContent = cfg.native_language;
+      configDraft['native_language'] = cfg.native_language;
+    }
   }
 
   // ── Slider sync ───────────────────────────────────────────────────────────────
@@ -585,6 +627,20 @@
     const newVal = checkbox.checked ? 0.70 : 0.30;
     document.getElementById('r-randomness_level').value = newVal;
     syncSlider('randomness_level', newVal);
+  }
+
+  // UPDATED: sync select (dropdown) config fields
+  function syncSelect(key, val) {
+    const lbl = document.getElementById('v-' + key);
+    if (lbl) lbl.textContent = val;
+    configDraft[key] = val;
+  }
+
+  // UPDATED: sync text input config fields
+  function syncTextInput(key, val) {
+    const lbl = document.getElementById('v-' + key);
+    if (lbl) lbl.textContent = val || '—';
+    configDraft[key] = val;
   }
 
   // ── Apply config ──────────────────────────────────────────────────────────────

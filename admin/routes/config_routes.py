@@ -20,10 +20,9 @@ class ConfigUpdate(BaseModel):
     retry_limit: float | None = None
     priority_boost: float | None = None
     randomness_level: float | None = None
-    # UPDATED: language configuration fields
-    default_language: str | None = None
-    allowed_languages: str | None = None
-    default_chat_mode: str | None = None
+    # UPDATED: primary language configuration — admin-controlled white-label
+    language_mode: str | None = None      # "english" | "native" | "mixed"
+    native_language: str | None = None    # ISO 639-1 code, e.g. "hi", "es", "fr"
 
     @field_validator("fallback_rate")
     @classmethod
@@ -53,36 +52,20 @@ class ConfigUpdate(BaseModel):
             raise ValueError("randomness_level must be between 0.0 and 1.0")
         return v
 
-    @field_validator("default_language")
+    @field_validator("language_mode")
     @classmethod
-    def validate_default_language(cls, v: str | None) -> str | None:
-        # UPDATED: validate against supported ISO codes (2–3 chars, alphanumeric)
-        if v is not None and (not v.isalpha() or not (2 <= len(v) <= 3)):
-            raise ValueError("default_language must be a valid ISO 639-1 language code")
-        return v.lower() if v else v
-
-    @field_validator("allowed_languages")
-    @classmethod
-    def validate_allowed_languages(cls, v: str | None) -> str | None:
-        # UPDATED: comma-separated list of ISO 639-1 codes
-        if v is not None:
-            codes = [c.strip() for c in v.split(",") if c.strip()]
-            if not codes:
-                raise ValueError("allowed_languages must contain at least one language code")
-            for code in codes:
-                if not code.isalpha() or not (2 <= len(code) <= 3):
-                    raise ValueError(f"Invalid language code in allowed_languages: {code!r}")
-            return ",".join(c.lower() for c in codes)
-        return v
-
-    @field_validator("default_chat_mode")
-    @classmethod
-    def validate_default_chat_mode(cls, v: str | None) -> str | None:
-        # UPDATED: must be one of the valid chat modes
+    def validate_language_mode(cls, v: str | None) -> str | None:
         valid = {"english", "native", "mixed"}
         if v is not None and v not in valid:
-            raise ValueError(f"default_chat_mode must be one of: {', '.join(sorted(valid))}")
+            raise ValueError(f"language_mode must be one of: {', '.join(sorted(valid))}")
         return v
+
+    @field_validator("native_language")
+    @classmethod
+    def validate_native_language(cls, v: str | None) -> str | None:
+        if v is not None and (not v.isalpha() or not (2 <= len(v) <= 3)):
+            raise ValueError("native_language must be a valid ISO 639-1 language code (2-3 letters)")
+        return v.lower() if v else v
 
 
 @router.get("/config", dependencies=[Depends(require_admin)])

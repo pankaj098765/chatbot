@@ -42,7 +42,7 @@ from bot.ai.behavior import BehaviorController
 from bot.ai.personas import PERSONAS
 from bot.database import mongodb as db
 from bot.database import redis_client as redis
-from bot.i18n import lang_of, t
+from bot.i18n import get_ui_lang, t
 from bot.services import admin_control
 from bot.utils.helpers import generate_session_id
 
@@ -171,10 +171,10 @@ async def start_fallback_session(bot: Bot, user_id: int) -> None:
     else:
         tone = "neutral"
 
-    # UPDATED: read language settings from user profile
-    lang = lang_of(user)                                         # ui language for t()
-    chat_language: str = (user.get("chat_language") if user else None) or "en"
-    chat_mode: str = (user.get("chat_mode") if user else None) or "mixed"
+    # UPDATED: read global language config — NOT per-user language fields
+    lang = await get_ui_lang()                                   # ui language for t()
+    chat_language: str = str(config.get("native_language", "en"))
+    chat_mode: str = str(config.get("language_mode", "english"))
 
     # Feature 9: Read current global patterns before picking persona
     global_patterns = await redis.get_global_patterns()
@@ -185,8 +185,8 @@ async def start_fallback_session(bot: Bot, user_id: int) -> None:
         persona_name=persona_name,
         randomness_level=randomness_level,  # Feature 6
         tone=tone,                          # Tone system
-        language=chat_language,             # UPDATED: multilingual
-        mode=chat_mode,                     # UPDATED: multilingual
+        native_language=chat_language,      # UPDATED: global language_mode/native_language
+        language_mode=chat_mode,            # UPDATED: global language_mode/native_language
     )
     await _record_persona_used(user_id, persona_name)
 

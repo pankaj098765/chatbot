@@ -80,6 +80,17 @@ async def create_user(user_id: int, username: str | None = None) -> dict:
         "last_5_results": [],     # rolling list of "GOOD_CHAT"|"BAD_CHAT"|"FAIL"
         "avg_session_time": 0.0,
         "frustration_score": 0,
+        # Fix #1: Match quality feedback loop
+        "positive_feedback_count": 0,
+        "negative_feedback_count": 0,
+        # Fix #3: Churn detection
+        "last_3_session_durations": [],
+        "avg_session_duration": 0.0,
+        "churn_risk": "LOW",      # "LOW" | "HIGH"
+        # Fix #5: Session diversity
+        "last_personas_used": [],
+        # Fix #9: Intent detection
+        "intent": None,           # "gender_check" | None
     }
     await _users().insert_one(doc)
     doc.pop("_id", None)

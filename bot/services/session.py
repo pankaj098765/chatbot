@@ -5,6 +5,9 @@ Manages:
   - Creating sessions (Redis hot-state + MongoDB persistence)
   - Relaying messages between partners
   - Ending sessions with outcome tracking
+
+Fix #3:  Session durations are passed to experience.record_outcome for churn detection.
+Fix #10: Warm start context (session_type + outcome) is saved to Redis on session end.
 """
 from __future__ import annotations
 
@@ -16,6 +19,8 @@ from aiogram import Bot
 from bot.database import mongodb as db
 from bot.database import redis_client as redis
 from bot.utils.helpers import generate_session_id
+
+_FALLBACK_PARTNER_ID = -1
 
 
 async def create_session(bot: Bot, user1_id: int, user2_id: int) -> str:
@@ -59,13 +64,15 @@ async def end_session(
     """
     End the session for user_id (and their partner).
     Returns the session_id if a session existed, else None.
+
+    Also records session duration for churn detection (Fix #3) and
+    persists warm-start context for the next /next call (Fix #10).
     """
     session_id = await redis.get_session_id(user_id)
     if not session_id:
         return None
 
     msg_count = await redis.get_message_count(session_id)
-    # Retrieve the session start time from Redis search_start as a proxy
     elapsed = await redis.get_search_elapsed(user_id)
 
     # Determine quality from session stats if not provided
@@ -84,5 +91,11 @@ async def end_session(
     )
     await redis.clear_session(user_id)
     await redis.clear_message_count(session_id)
+
+    # Fix #10: Save warm start context so /next can boost next match quality
+    partner_id = await redis.get_partner(user_id)
+    session_type = "fallback" if (partner_id == _FALLBACK_PARTNER_ID) else "real"
+    if quality is not None:
+        await redis.set_warm_start(user_id, session_type, quality)
 
     return session_id

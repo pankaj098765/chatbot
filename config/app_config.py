@@ -9,12 +9,20 @@ Loads settings from three sources in increasing priority order:
 
 Fields
 ------
-brand_name          Name shown in bot welcome messages and admin dashboard.
-default_language    ISO 639-1 code for new users' default UI language.
-allowed_languages   List of ISO codes available in the /language selector.
-default_chat_mode   "english" | "native" | "mixed"
-ai_enabled          Enable LLM-powered fallback responses (requires OPENAI_API_KEY).
-payment_enabled     Enable Telegram Stars payment commands (/pay, /vip).
+brand_name        Name shown in bot welcome messages and admin dashboard.
+language_mode     "english" | "native" | "mixed"  — controls how the bot speaks.
+                  english → all responses in English
+                  native  → all responses in native_language only
+                  mixed   → mix of English + native_language (e.g. Hinglish)
+native_language   ISO 639-1 code for the native language (e.g. "hi", "es", "fr").
+                  Used when language_mode is "native" or "mixed".
+                  ADMIN-CONTROLLED ONLY — users cannot override this.
+ui_language       ISO 639-1 code used for UI strings (buttons, menus).
+                  Defaults to the derived language from language_mode + native_language.
+chat_language     ISO 639-1 code used by the AI / LLM for response generation.
+                  Defaults to native_language so the AI speaks the right language.
+ai_enabled        Enable LLM-powered fallback responses (requires OPENAI_API_KEY).
+payment_enabled   Enable Telegram Stars payment commands (/pay, /vip).
 """
 from __future__ import annotations
 
@@ -33,9 +41,12 @@ _CONFIG_DIR = Path(__file__).parent
 @dataclass(frozen=True)
 class AppConfig:
     brand_name: str
-    default_language: str
-    allowed_languages: list[str]
-    default_chat_mode: str
+    # UPDATED: primary language config (admin-only, white-label)
+    language_mode: str          # "english" | "native" | "mixed"
+    native_language: str        # ISO 639-1 code, e.g. "hi", "es", "fr"
+    # Separate UI vs AI language channels
+    ui_language: str            # ISO 639-1 code for button/menu strings
+    chat_language: str          # ISO 639-1 code used by the LLM/AI
     ai_enabled: bool
     payment_enabled: bool
 
@@ -67,25 +78,22 @@ def _get_app_config() -> AppConfig:
 
     brand_name = os.getenv("BRAND_NAME") or str(merged.get("brand_name", "Anonymous Chat"))
 
-    default_language = os.getenv("DEFAULT_LANGUAGE") or str(
-        merged.get("default_language", "en")
+    # UPDATED: language_mode and native_language replace old default_language /
+    # allowed_languages / default_chat_mode.  Env vars take priority, then
+    # config.json / default.json, then safe fallbacks.
+    language_mode = (
+        os.getenv("LANGUAGE_MODE")
+        or str(merged.get("language_mode", "english"))
     )
+    if language_mode not in ("english", "native", "mixed"):
+        language_mode = "english"
 
-    env_langs = os.getenv("ALLOWED_LANGUAGES")
-    if env_langs:
-        allowed_languages = [c.strip() for c in env_langs.split(",") if c.strip()]
-    elif isinstance(merged.get("allowed_languages"), list):
-        allowed_languages = [str(c) for c in merged["allowed_languages"]]
-    elif isinstance(merged.get("allowed_languages"), str):
-        allowed_languages = [
-            c.strip() for c in merged["allowed_languages"].split(",") if c.strip()
-        ]
-    else:
-        allowed_languages = ["en", "hi", "es"]
-
-    default_chat_mode = os.getenv("DEFAULT_CHAT_MODE") or str(
-        merged.get("default_chat_mode", "mixed")
-    )
+    native_language = (
+        os.getenv("NATIVE_LANGUAGE")
+        or str(merged.get("native_language", "en"))
+    ).strip().lower()
+    if not native_language:
+        native_language = "en"
 
     env_ai = os.getenv("AI_ENABLED")
     ai_enabled = _parse_bool(env_ai) if env_ai is not None else bool(
@@ -97,11 +105,25 @@ def _get_app_config() -> AppConfig:
         merged.get("payment_enabled", True)
     )
 
+    # ui_language: language for buttons/menus — defaults to derived value
+    _derived_ui = "en" if language_mode == "english" else native_language
+    ui_language = (
+        os.getenv("UI_LANGUAGE")
+        or str(merged.get("ui_language", _derived_ui))
+    ).strip().lower() or _derived_ui
+
+    # chat_language: language the AI speaks — defaults to native_language
+    chat_language = (
+        os.getenv("CHAT_LANGUAGE")
+        or str(merged.get("chat_language", native_language))
+    ).strip().lower() or native_language
+
     return AppConfig(
         brand_name=brand_name,
-        default_language=default_language,
-        allowed_languages=allowed_languages,
-        default_chat_mode=default_chat_mode,
+        language_mode=language_mode,
+        native_language=native_language,
+        ui_language=ui_language,
+        chat_language=chat_language,
         ai_enabled=ai_enabled,
         payment_enabled=payment_enabled,
     )

@@ -13,7 +13,8 @@ Feature 1: Each relayed message records a per-user timestamp in Redis so
            response_delay_variance when the session ends.
 Feature 4: Post-session exit experience messages are triggered via
            session.end_session(bot=bot) in the search handlers.
-Multilingual: all user-facing strings use t() with the user's ui_language.
+Language:  All user-facing strings use t() with the global UI language from
+           get_ui_lang().  Language is admin-controlled — not per-user.
 """
 from __future__ import annotations
 
@@ -23,7 +24,7 @@ from aiogram.types import CallbackQuery, Message
 
 from bot.database import mongodb as db
 from bot.database import redis_client as redis
-from bot.i18n import lang_of, t
+from bot.i18n import get_ui_lang, t
 from bot.keyboards.inline import feedback_keyboard, search_keyboard
 from bot.services import anti_abuse, experience
 from bot.services.analytics import track_feedback
@@ -47,8 +48,7 @@ async def relay_message(message: Message, state: FSMContext, bot: Bot) -> None:
     user_id = message.from_user.id  # type: ignore[union-attr]
     text = message.text or ""
 
-    user = await db.get_user(user_id)
-    lang = lang_of(user)
+    lang = await get_ui_lang()
 
     # Abuse check
     bad_score = await anti_abuse.check_and_score_message(user_id, text)
@@ -95,8 +95,7 @@ async def cb_gender(callback: CallbackQuery, state: FSMContext) -> None:
     gender = "male" if callback.data == "gender_male" else "female"
     await db.update_user(user_id, {"gender": gender})
 
-    user = await db.get_user(user_id)
-    lang = lang_of(user)
+    lang = await get_ui_lang()
     key = "gender_set_male" if gender == "male" else "gender_set_female"
 
     await callback.message.edit_text(  # type: ignore[union-attr]
@@ -123,8 +122,7 @@ async def cb_feedback(callback: CallbackQuery) -> None:
     # Fix #1: Update feedback counters for priority scoring
     await experience.update_feedback_score(user_id, positive=(rating == "good"))
 
-    user = await db.get_user(user_id)
-    lang = lang_of(user)
+    lang = await get_ui_lang()
 
     await callback.message.edit_text(  # type: ignore[union-attr]
         t("feedback_thanks", lang),

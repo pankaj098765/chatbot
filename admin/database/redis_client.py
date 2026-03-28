@@ -21,10 +21,9 @@ _CONFIG_DEFAULTS: dict = {
     "retry_limit": 3.0,
     "priority_boost": 0.0,
     "randomness_level": 0.5,
-    # Seeded from app_config so language defaults reflect buyer's configuration
-    "default_language": app_config.default_language,
-    "allowed_languages": ",".join(app_config.allowed_languages),
-    "default_chat_mode": app_config.default_chat_mode,
+    # UPDATED: seeded from app_config — language_mode + native_language only
+    "language_mode": app_config.language_mode,
+    "native_language": app_config.native_language,
 }
 
 

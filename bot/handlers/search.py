@@ -11,8 +11,9 @@ Fix #7:  Poll timeout adapts to queue health stats.
 Fix #8:  Watchdog re-queues stuck users (runs in retention_engine background task).
 Fix #10: /next carries warm-start context to boost next match quality.
 
-# UPDATED: all user-facing strings use t() with the user's ui_language.
-          Partner notifications look up the partner's language individually.
+# UPDATED: language is now admin-controlled globally.
+          All user-facing strings use t() with the global UI language from
+          get_ui_lang().  All users receive the same language — no per-user lookup.
 """
 from __future__ import annotations
 
@@ -27,7 +28,7 @@ from aiogram.types import CallbackQuery, Message
 from bot.config import settings
 from bot.database import mongodb as db
 from bot.database import redis_client as redis
-from bot.i18n import lang_of, t
+from bot.i18n import get_ui_lang, t
 from bot.keyboards.inline import next_keyboard, search_keyboard, stop_keyboard
 from bot.services import anti_abuse, experience, fallback, matchmaking, session
 from bot.services.analytics import track_match_attempt
@@ -49,15 +50,15 @@ async def _do_search(
 ) -> None:
     user_id = message.from_user.id  # type: ignore[union-attr]
 
+    # UPDATED: global UI language — same for every user
+    lang = await get_ui_lang()
+
     # Abuse cooldown check
     if await anti_abuse.is_blocked(user_id):
-        user = await db.get_user(user_id)
-        lang = lang_of(user)
         await message.answer(t("abuse_blocked", lang))
         return
 
     user = await db.get_or_create_user(user_id)
-    lang = lang_of(user)
 
     # Consult experience engine to decide action
     action = experience.decide_next_action(user)
@@ -135,7 +136,7 @@ async def _do_search(
         await redis.add_recent_match(user_id, partner_id)
         await redis.add_recent_match(partner_id, user_id)
 
-        # Notify both — each in their own language
+        # UPDATED: all users share the same global language — no per-partner lookup
         wait_time = time.time() - search_start
         await state.set_state(UserState.CONNECTED)
 
@@ -144,12 +145,10 @@ async def _do_search(
             reply_markup=next_keyboard(lang),
         )
         try:
-            partner = await db.get_user(partner_id)
-            partner_lang = lang_of(partner)
             await bot.send_message(
                 partner_id,
-                t("connected_stranger", partner_lang),
-                reply_markup=next_keyboard(partner_lang),
+                t("connected_stranger", lang),
+                reply_markup=next_keyboard(lang),
             )
         except Exception:
             pass
@@ -170,14 +169,11 @@ async def _do_search(
 @router.message(Command("search"))
 async def cmd_search(message: Message, state: FSMContext, bot: Bot) -> None:
     current = await state.get_state()
+    lang = await get_ui_lang()
     if current == UserState.SEARCHING:
-        user = await db.get_user(message.from_user.id)  # type: ignore[union-attr]
-        lang = lang_of(user)
         await message.answer(t("already_searching", lang))
         return
     if current == UserState.CONNECTED:
-        user = await db.get_user(message.from_user.id)  # type: ignore[union-attr]
-        lang = lang_of(user)
         await message.answer(t("already_in_chat", lang))
         return
     await _do_search(message, state, bot)
@@ -198,19 +194,18 @@ async def cb_search(callback: CallbackQuery, state: FSMContext, bot: Bot) -> Non
 async def _do_next(message: Message, state: FSMContext, bot: Bot) -> None:
     user_id = message.from_user.id  # type: ignore[union-attr]
     partner_id = await redis.get_partner(user_id)
+    lang = await get_ui_lang()
 
     # End current session — Feature 4: pass bot for exit experience message
     await session.end_session(user_id, exit_reason="next", bot=bot)
 
-    # Notify partner in their language
+    # UPDATED: all users share the same global language
     if partner_id and partner_id > 0:
         try:
-            partner = await db.get_user(partner_id)
-            partner_lang = lang_of(partner)
             await bot.send_message(
                 partner_id,
-                t("partner_left_next", partner_lang),
-                reply_markup=search_keyboard(partner_lang),
+                t("partner_left_next", lang),
+                reply_markup=search_keyboard(lang),
             )
         except Exception:
             pass
@@ -223,8 +218,7 @@ async def _do_next(message: Message, state: FSMContext, bot: Bot) -> None:
 async def cmd_next(message: Message, state: FSMContext, bot: Bot) -> None:
     current = await state.get_state()
     if current not in (UserState.CONNECTED, UserState.SEARCHING):
-        user = await db.get_user(message.from_user.id)  # type: ignore[union-attr]
-        lang = lang_of(user)
+        lang = await get_ui_lang()
         await message.answer(t("not_in_chat", lang))
         return
     await _do_next(message, state, bot)
@@ -242,27 +236,25 @@ async def cb_next(callback: CallbackQuery, state: FSMContext, bot: Bot) -> None:
 async def _do_stop(message: Message, state: FSMContext, bot: Bot) -> None:
     user_id = message.from_user.id  # type: ignore[union-attr]
     partner_id = await redis.get_partner(user_id)
+    lang = await get_ui_lang()
 
     # Feature 4: pass bot for exit experience message
     await session.end_session(user_id, exit_reason="stop", bot=bot)
     await matchmaking.dequeue_user(user_id)
     await state.set_state(UserState.IDLE)
 
-    user = await db.get_user(user_id)
-    lang = lang_of(user)
     await message.answer(
         t("chat_ended", lang),
         reply_markup=search_keyboard(lang),
     )
 
+    # UPDATED: all users share the same global language
     if partner_id and partner_id > 0:
         try:
-            partner = await db.get_user(partner_id)
-            partner_lang = lang_of(partner)
             await bot.send_message(
                 partner_id,
-                t("partner_left_stop", partner_lang),
-                reply_markup=search_keyboard(partner_lang),
+                t("partner_left_stop", lang),
+                reply_markup=search_keyboard(lang),
             )
         except Exception:
             pass
@@ -272,8 +264,7 @@ async def _do_stop(message: Message, state: FSMContext, bot: Bot) -> None:
 async def cmd_stop(message: Message, state: FSMContext, bot: Bot) -> None:
     current = await state.get_state()
     if current == UserState.IDLE:
-        user = await db.get_user(message.from_user.id)  # type: ignore[union-attr]
-        lang = lang_of(user)
+        lang = await get_ui_lang()
         await message.answer(t("not_in_chat_stop", lang))
         return
     await _do_stop(message, state, bot)

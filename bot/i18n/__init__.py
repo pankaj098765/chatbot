@@ -60,7 +60,7 @@ def t(key: str, lang: str = "en", **kwargs: object) -> str:
 
     Examples::
 
-        t("welcome_message", "hi")
+        t("welcome_message", lang, app_name=app_config.brand_name)
         t("premium_button", lang, price=100)
         t("vip_info", lang, vip_price=250, subscription_days=30)
     """
@@ -78,16 +78,72 @@ def t(key: str, lang: str = "en", **kwargs: object) -> str:
     return text
 
 
-def lang_of(user: dict | None) -> str:
-    """# NEW
-    Extract the ``ui_language`` from a user document, defaulting to ``"en"``.
+async def get_ui_lang() -> str:
+    """# UPDATED
+    Return the UI language for buttons/menus from admin configuration.
 
-    Usage::
+    Prefers the explicit ``ui_language`` config key (set independently of
+    chat language).  Falls back to the derived value from language_mode +
+    native_language for backward compatibility.
 
-        user = await db.get_user(user_id)
-        lang = lang_of(user)
-        await message.answer(t("welcome_message", lang))
+    Falls back to "en" on any error so the bot always has a safe default.
     """
-    if not user:
+    try:
+        from bot.services import admin_control  # lazy import — avoids circular deps
+        from bot.i18n.languages import SUPPORTED_LANGUAGES
+        config = await admin_control.get_config()
+
+        # Prefer explicitly set ui_language
+        ui_language = str(config.get("ui_language", "")).strip().lower()
+        if ui_language and ui_language in SUPPORTED_LANGUAGES:
+            return ui_language
+
+        # Backward compat: derive from language_mode + native_language
+        language_mode = str(config.get("language_mode", "english"))
+        native_language = str(config.get("native_language", "en"))
+        if language_mode == "english":
+            return "en"
+        if native_language not in SUPPORTED_LANGUAGES:
+            logger.warning(
+                "get_ui_lang: unsupported native_language=%r, falling back to 'en'",
+                native_language,
+            )
+            return "en"
+        return native_language
+    except Exception:
         return "en"
-    return user.get("ui_language") or "en"
+
+
+async def get_chat_lang() -> str:
+    """
+    Return the AI/LLM chat language from admin configuration.
+
+    Reads the explicit ``chat_language`` config key.  Falls back to
+    ``native_language``, then to "en" for safety.
+    """
+    try:
+        from bot.services import admin_control  # lazy import — avoids circular deps
+        from bot.i18n.languages import SUPPORTED_LANGUAGES
+        config = await admin_control.get_config()
+
+        chat_language = str(config.get("chat_language", "")).strip().lower()
+        if chat_language and chat_language in SUPPORTED_LANGUAGES:
+            return chat_language
+
+        # Fallback: native_language
+        native_language = str(config.get("native_language", "en"))
+        if native_language in SUPPORTED_LANGUAGES:
+            return native_language
+        return "en"
+    except Exception:
+        return "en"
+
+
+def lang_of(user: dict | None) -> str:
+    """# DEPRECATED — use ``await get_ui_lang()`` instead.
+
+    Previously extracted ui_language from a user document.  Language is now
+    admin-controlled globally; this function is kept only for any call sites
+    not yet migrated and always returns the safe English fallback.
+    """
+    return "en"

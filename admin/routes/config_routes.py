@@ -10,6 +10,7 @@ from pydantic import BaseModel, field_validator
 
 from admin.auth import require_admin
 from admin.database import redis_client
+from bot.i18n.languages import SUPPORTED_LANGUAGES
 from config.app_config import app_config
 
 router = APIRouter()
@@ -20,10 +21,12 @@ class ConfigUpdate(BaseModel):
     retry_limit: float | None = None
     priority_boost: float | None = None
     randomness_level: float | None = None
-    # UPDATED: language configuration fields
-    default_language: str | None = None
-    allowed_languages: str | None = None
-    default_chat_mode: str | None = None
+    # UPDATED: primary language configuration — admin-controlled white-label
+    language_mode: str | None = None      # "english" | "native" | "mixed"
+    native_language: str | None = None    # ISO 639-1 code, e.g. "hi", "es", "fr"
+    # Separate UI vs AI language channels
+    ui_language: str | None = None        # ISO 639-1 code for buttons/menus
+    chat_language: str | None = None      # ISO 639-1 code for LLM/AI responses
 
     @field_validator("fallback_rate")
     @classmethod
@@ -53,36 +56,59 @@ class ConfigUpdate(BaseModel):
             raise ValueError("randomness_level must be between 0.0 and 1.0")
         return v
 
-    @field_validator("default_language")
+    @field_validator("language_mode")
     @classmethod
-    def validate_default_language(cls, v: str | None) -> str | None:
-        # UPDATED: validate against supported ISO codes (2–3 chars, alphanumeric)
-        if v is not None and (not v.isalpha() or not (2 <= len(v) <= 3)):
-            raise ValueError("default_language must be a valid ISO 639-1 language code")
-        return v.lower() if v else v
-
-    @field_validator("allowed_languages")
-    @classmethod
-    def validate_allowed_languages(cls, v: str | None) -> str | None:
-        # UPDATED: comma-separated list of ISO 639-1 codes
-        if v is not None:
-            codes = [c.strip() for c in v.split(",") if c.strip()]
-            if not codes:
-                raise ValueError("allowed_languages must contain at least one language code")
-            for code in codes:
-                if not code.isalpha() or not (2 <= len(code) <= 3):
-                    raise ValueError(f"Invalid language code in allowed_languages: {code!r}")
-            return ",".join(c.lower() for c in codes)
-        return v
-
-    @field_validator("default_chat_mode")
-    @classmethod
-    def validate_default_chat_mode(cls, v: str | None) -> str | None:
-        # UPDATED: must be one of the valid chat modes
+    def validate_language_mode(cls, v: str | None) -> str | None:
         valid = {"english", "native", "mixed"}
         if v is not None and v not in valid:
-            raise ValueError(f"default_chat_mode must be one of: {', '.join(sorted(valid))}")
+            raise ValueError(f"language_mode must be one of: {', '.join(sorted(valid))}")
         return v
+
+    @field_validator("native_language")
+    @classmethod
+    def validate_native_language(cls, v: str | None) -> str | None:
+        if v is None:
+            return v
+        v = v.strip().lower()
+        if v not in SUPPORTED_LANGUAGES:
+            supported = ", ".join(sorted(SUPPORTED_LANGUAGES.keys()))
+            raise ValueError(
+                f"native_language '{v}' is not supported. "
+                f"Must be one of: {supported}"
+            )
+        return v
+
+    @field_validator("ui_language")
+    @classmethod
+    def validate_ui_language(cls, v: str | None) -> str | None:
+        if v is None:
+            return v
+        v = v.strip().lower()
+        if v not in SUPPORTED_LANGUAGES:
+            supported = ", ".join(sorted(SUPPORTED_LANGUAGES.keys()))
+            raise ValueError(
+                f"ui_language '{v}' is not supported. Must be one of: {supported}"
+            )
+        return v
+
+    @field_validator("chat_language")
+    @classmethod
+    def validate_chat_language(cls, v: str | None) -> str | None:
+        if v is None:
+            return v
+        v = v.strip().lower()
+        if v not in SUPPORTED_LANGUAGES:
+            supported = ", ".join(sorted(SUPPORTED_LANGUAGES.keys()))
+            raise ValueError(
+                f"chat_language '{v}' is not supported. Must be one of: {supported}"
+            )
+        return v
+
+
+@router.get("/languages", dependencies=[Depends(require_admin)])
+async def get_languages() -> dict:
+    """Return the full map of supported language codes to display names."""
+    return {"languages": SUPPORTED_LANGUAGES}
 
 
 @router.get("/config", dependencies=[Depends(require_admin)])

@@ -5,8 +5,8 @@ Plans:
   Premium (100 Stars) — unlocks gender filter (30 days)
   VIP     (250 Stars) — priority matching (30 days)
 
-# UPDATED: all user-facing strings are now rendered via t() so every message
-  is delivered in the user's configured ui_language.
+# UPDATED: all user-facing strings use t() with the global UI language from
+  get_ui_lang().  Language is admin-controlled — not per-user.
 """
 from __future__ import annotations
 
@@ -24,7 +24,7 @@ from aiogram.types import (
 
 from bot.config import settings
 from bot.database import mongodb as db
-from bot.i18n import lang_of, t
+from bot.i18n import get_ui_lang, t
 from bot.keyboards.inline import payment_keyboard, search_keyboard
 from config.app_config import app_config
 
@@ -45,8 +45,7 @@ _PLAN_INFO = {
 
 @router.message(Command("pay"))
 async def cmd_pay(message: Message) -> None:
-    user = await db.get_user(message.from_user.id)  # type: ignore[union-attr]
-    lang = lang_of(user)
+    lang = await get_ui_lang()
     if not app_config.payment_enabled:
         await message.answer(t("payment_disabled", lang))
         return
@@ -64,8 +63,7 @@ async def cmd_pay(message: Message) -> None:
 
 @router.message(Command("vip"))
 async def cmd_vip(message: Message) -> None:
-    user = await db.get_user(message.from_user.id)  # type: ignore[union-attr]
-    lang = lang_of(user)
+    lang = await get_ui_lang()
     if not app_config.payment_enabled:
         await message.answer(t("payment_disabled", lang))
         return
@@ -82,7 +80,7 @@ async def cmd_vip(message: Message) -> None:
 
 
 async def _send_invoice(bot: Bot, chat_id: int, plan: str, lang: str = "en") -> None:
-    """Send a Telegram Stars invoice for *plan* in the user's language."""
+    """Send a Telegram Stars invoice for *plan* in the global bot language."""
     info = _PLAN_INFO[plan]
     title = t(f"{plan}_plan_title", lang)
     description = t(f"{plan}_plan_description", lang)
@@ -100,8 +98,7 @@ async def _send_invoice(bot: Bot, chat_id: int, plan: str, lang: str = "en") -> 
 @router.callback_query(F.data == "buy_premium")
 async def cb_buy_premium(callback: CallbackQuery, bot: Bot) -> None:
     await callback.answer()
-    user = await db.get_user(callback.from_user.id)
-    lang = lang_of(user)
+    lang = await get_ui_lang()
     if not app_config.payment_enabled:
         await callback.message.answer(t("payment_disabled", lang))  # type: ignore[union-attr]
         return
@@ -111,8 +108,7 @@ async def cb_buy_premium(callback: CallbackQuery, bot: Bot) -> None:
 @router.callback_query(F.data == "buy_vip")
 async def cb_buy_vip(callback: CallbackQuery, bot: Bot) -> None:
     await callback.answer()
-    user = await db.get_user(callback.from_user.id)
-    lang = lang_of(user)
+    lang = await get_ui_lang()
     if not app_config.payment_enabled:
         await callback.message.answer(t("payment_disabled", lang))  # type: ignore[union-attr]
         return
@@ -134,8 +130,7 @@ async def successful_payment(message: Message) -> None:
     expiry = datetime.now(timezone.utc) + timedelta(days=settings.subscription_days)
     expiry_str = expiry.strftime("%Y-%m-%d")
 
-    user = await db.get_user(user_id)
-    lang = lang_of(user)
+    lang = await get_ui_lang()
 
     if plan == "premium":
         await db.update_user(user_id, {"is_premium": True, "premium_expires": expiry})

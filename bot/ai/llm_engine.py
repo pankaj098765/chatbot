@@ -63,41 +63,68 @@ _LANG_NAMES: dict[str, str] = {
 }
 
 
-def _build_language_instruction(chat_language: str, chat_mode: str) -> str:
-    """# NEW
-    Return the language/style instruction block that is injected into the
-    system prompt based on the user's chat_language and chat_mode settings.
+# Well-known mixed-language blend names for the LLM prompt
+_MIX_NAMES: dict[str, str] = {
+    "hi": "Hinglish",
+    "es": "Spanglish",
+    "fr": "Franglais",
+    "de": "Denglisch",
+    "pt": "Portuñol",
+    "ar": "Arabizi",
+    "ru": "Runglish",
+    "tr": "Türklish",
+    "id": "Bahasa-English mix",
+}
+
+
+def _build_language_instruction(native_language: str, language_mode: str) -> str:
+    """# UPDATED
+    Return the language/style instruction block injected into the system prompt
+    based on the admin-controlled language_mode and native_language settings.
 
     Modes
     -----
-    english  → always respond in English regardless of chat_language
-    native   → respond entirely in chat_language (no English mixing)
-    mixed    → mix English with chat_language (e.g. Hinglish for hi)
+    english  → always respond in English regardless of native_language
+    native   → respond entirely in native_language (no English mixing)
+    mixed    → mix English with native_language (dynamic blend name per language)
     """
-    lang_name = _LANG_NAMES.get(chat_language, chat_language.upper())
+    from bot.i18n.languages import SUPPORTED_LANGUAGES  # lazy — avoid circular
 
-    if chat_mode == "english":
+    lang_name = _LANG_NAMES.get(native_language, native_language.upper())
+
+    # Fallback to English for unsupported language codes
+    if native_language not in SUPPORTED_LANGUAGES and native_language != "en":
+        logger.warning(
+            "_build_language_instruction: unsupported native_language=%r, "
+            "falling back to English",
+            native_language,
+        )
+        native_language = "en"
+        language_mode = "english"
+        lang_name = "English"
+
+    if language_mode == "english":
         return (
             "Language: English\n"
             "Style: Respond entirely in English.\n"
         )
-    if chat_mode == "native":
+    if language_mode == "native":
         return (
             f"Language: {lang_name}\n"
             f"Style: Respond entirely in {lang_name}. Do NOT mix in English words.\n"
         )
-    # default: mixed
-    if chat_language == "en":
-        # mixed + English is just plain English
+    # mixed
+    if native_language == "en":
         return (
             "Language: English\n"
             "Style: Respond in natural casual English.\n"
         )
+    mix_name = _MIX_NAMES.get(native_language, f"{lang_name}-English")
     return (
-        f"Language: {lang_name} + English mix\n"
-        f"Style: Use a natural mix of English and {lang_name} "
-        f"(e.g. {'Hinglish' if chat_language == 'hi' else lang_name + '-English'}). "
-        "Switch naturally between the two languages mid-sentence.\n"
+        f"Language: {lang_name} + English mix ({mix_name})\n"
+        f"Style: Use a natural conversational mix of English and {lang_name}, "
+        f"switching between the two mid-sentence the way {mix_name} speakers do. "
+        "Keep it casual and realistic.\n"
     )
 
 
@@ -242,8 +269,8 @@ async def generate_llm_response(context: dict) -> list[str] | None:
         "tone":            str,          # "feminine" | "neutral" | "masculine"
         "history":         list[str],    # last ≤3 messages sent by the bot
         "emotional_state": str,          # "neutral" | "playful" | "shy"
-        "language":        str,          # NEW — ISO 639-1 code, e.g. "hi"
-        "mode":            str,          # NEW — "english" | "native" | "mixed"
+        "native_language": str,          # UPDATED — ISO 639-1 code, e.g. "hi"
+        "language_mode":   str,          # UPDATED — "english" | "native" | "mixed"
     }
 
     Returns a list[str] on success (1–2 messages after anti-detection), or
@@ -257,12 +284,12 @@ async def generate_llm_response(context: dict) -> list[str] | None:
     persona = context.get("persona", "friendly")
     emotional_state = context.get("emotional_state", "neutral")
     history: list[str] = context.get("history", [])
-    # UPDATED: pick up language/mode from context; fall back to mixed English
-    chat_language: str = context.get("language", "en")
-    chat_mode: str = context.get("mode", "mixed")
+    # UPDATED: pick up language/mode from context using renamed keys
+    native_language: str = context.get("native_language", "en")
+    language_mode: str = context.get("language_mode", "english")
 
     # UPDATED: build dynamic language instruction
-    language_instruction = _build_language_instruction(chat_language, chat_mode)
+    language_instruction = _build_language_instruction(native_language, language_mode)
 
     # Build system prompt
     system_prompt = _PROMPT_TEMPLATE.format(

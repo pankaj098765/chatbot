@@ -424,6 +424,64 @@
       </div>
     </div>
 
+    <div class="config-card">
+      <div class="cfg-label">
+        <span class="cfg-name">Language Mode</span>
+        <span class="cfg-value" id="v-language_mode">english</span>
+      </div>
+      <div class="cfg-desc">Controls how the entire bot speaks to ALL users. <b>english</b> = English only · <b>native</b> = Native language only · <b>mixed</b> = Mixed (e.g. Hinglish, Spanglish)</div>
+      <select id="s-language_mode" style="width:100%;padding:8px;border-radius:8px;background:var(--bg);color:var(--text);border:1px solid var(--border);margin-top:8px;" onchange="syncSelect('language_mode', this.value)">
+        <option value="english">English only</option>
+        <option value="native">Native language only</option>
+        <option value="mixed">Mixed (English + Native)</option>
+      </select>
+    </div>
+
+    <div class="config-card">
+      <div class="cfg-label">
+        <span class="cfg-name">Native Language</span>
+        <span class="cfg-value" id="v-native_language">en</span>
+      </div>
+      <div class="cfg-desc">Language used when Mode is "native" or "mixed" (e.g. Hinglish, Spanglish, Franglais).</div>
+      <input type="text" id="native_lang_search" placeholder="🔍 Search language…"
+             style="width:100%;padding:7px 10px;border-radius:8px;background:var(--bg);color:var(--text);border:1px solid var(--border);margin-top:8px;font-size:0.85rem;"
+             oninput="filterLangSelect('s-native_language', this.value)" />
+      <select id="s-native_language" size="5"
+              style="width:100%;margin-top:6px;border-radius:8px;background:var(--bg);color:var(--text);border:1px solid var(--border);font-size:0.85rem;padding:4px;"
+              onchange="syncSelect('native_language', this.value)">
+      </select>
+    </div>
+
+    <div class="config-card">
+      <div class="cfg-label">
+        <span class="cfg-name">UI Language</span>
+        <span class="cfg-value" id="v-ui_language">en</span>
+      </div>
+      <div class="cfg-desc">Language for buttons and menus. Can differ from the AI chat language.</div>
+      <input type="text" id="ui_lang_search" placeholder="🔍 Search language…"
+             style="width:100%;padding:7px 10px;border-radius:8px;background:var(--bg);color:var(--text);border:1px solid var(--border);margin-top:8px;font-size:0.85rem;"
+             oninput="filterLangSelect('s-ui_language', this.value)" />
+      <select id="s-ui_language" size="5"
+              style="width:100%;margin-top:6px;border-radius:8px;background:var(--bg);color:var(--text);border:1px solid var(--border);font-size:0.85rem;padding:4px;"
+              onchange="syncSelect('ui_language', this.value)">
+      </select>
+    </div>
+
+    <div class="config-card">
+      <div class="cfg-label">
+        <span class="cfg-name">Chat Language (AI)</span>
+        <span class="cfg-value" id="v-chat_language">en</span>
+      </div>
+      <div class="cfg-desc">Language the AI uses for responses. Independent of UI language.</div>
+      <input type="text" id="chat_lang_search" placeholder="🔍 Search language…"
+             style="width:100%;padding:7px 10px;border-radius:8px;background:var(--bg);color:var(--text);border:1px solid var(--border);margin-top:8px;font-size:0.85rem;"
+             oninput="filterLangSelect('s-chat_language', this.value)" />
+      <select id="s-chat_language" size="5"
+              style="width:100%;margin-top:6px;border-radius:8px;background:var(--bg);color:var(--text);border:1px solid var(--border);font-size:0.85rem;padding:4px;"
+              onchange="syncSelect('chat_language', this.value)">
+      </select>
+    </div>
+
   </div>
 
   <button class="apply-btn" id="applyBtn" onclick="applyConfig()">Apply Configuration</button>
@@ -445,6 +503,7 @@
     if (adminToken) {
       fetchStats();
       fetchConfig();
+      loadLanguageOptions();
       startAutoRefresh();
     }
   });
@@ -542,6 +601,26 @@
 
     const rl = parseFloat(document.getElementById('r-randomness_level').value);
     document.getElementById('t-randomness_high').checked = rl >= 0.65;
+
+    // UPDATED: sync language_mode select
+    if (cfg.language_mode) {
+      const sel = document.getElementById('s-language_mode');
+      if (sel) sel.value = cfg.language_mode;
+      const lbl = document.getElementById('v-language_mode');
+      if (lbl) lbl.textContent = cfg.language_mode;
+      configDraft['language_mode'] = cfg.language_mode;
+    }
+
+    // Sync language dropdowns (native_language, ui_language, chat_language)
+    ['native_language', 'ui_language', 'chat_language'].forEach(key => {
+      const val = cfg[key];
+      if (!val) return;
+      const sel = document.getElementById('s-' + key);
+      if (sel) sel.value = val;
+      const lbl = document.getElementById('v-' + key);
+      if (lbl) lbl.textContent = val;
+      configDraft[key] = val;
+    });
   }
 
   // ── Slider sync ───────────────────────────────────────────────────────────────
@@ -585,6 +664,54 @@
     const newVal = checkbox.checked ? 0.70 : 0.30;
     document.getElementById('r-randomness_level').value = newVal;
     syncSlider('randomness_level', newVal);
+  }
+
+  // UPDATED: sync select (dropdown) config fields
+  function syncSelect(key, val) {
+    const lbl = document.getElementById('v-' + key);
+    if (lbl) lbl.textContent = val;
+    configDraft[key] = val;
+  }
+
+  // ── Language dropdown helpers ─────────────────────────────────────────────────
+
+  // Filter any language <select> by a search query
+  function filterLangSelect(selectId, query) {
+    const sel = document.getElementById(selectId);
+    if (!sel) return;
+    const q = query.trim().toLowerCase();
+    Array.from(sel.options).forEach(opt => {
+      const visible = !q || opt.text.toLowerCase().includes(q) || opt.value.toLowerCase().includes(q);
+      opt.style.display = visible ? '' : 'none';
+    });
+  }
+
+  // Flags for well-known language codes
+  const _LANG_FLAGS = {
+    en:'🇬🇧', hi:'🇮🇳', es:'🇪🇸', fr:'🇫🇷', de:'🇩🇪',
+    pt:'🇧🇷', ar:'🇸🇦', ru:'🇷🇺', tr:'🇹🇷', id:'🇮🇩',
+  };
+
+  // Populate all three language selects from the /admin/languages API
+  async function loadLanguageOptions() {
+    if (!adminToken) return;
+    try {
+      const data = await apiFetch('/admin/languages');
+      const langs = data.languages || {};
+      const selectIds = ['s-native_language', 's-ui_language', 's-chat_language'];
+      selectIds.forEach(id => {
+        const sel = document.getElementById(id);
+        if (!sel) return;
+        sel.innerHTML = '';
+        Object.entries(langs).sort((a, b) => a[1].localeCompare(b[1])).forEach(([code, name]) => {
+          const flag = _LANG_FLAGS[code] || '🌐';
+          const opt = document.createElement('option');
+          opt.value = code;
+          opt.textContent = `${flag} ${name} (${code})`;
+          sel.appendChild(opt);
+        });
+      });
+    } catch (_) {}
   }
 
   // ── Apply config ──────────────────────────────────────────────────────────────

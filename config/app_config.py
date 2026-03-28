@@ -34,7 +34,7 @@ _CONFIG_DIR = Path(__file__).parent
 class AppConfig:
     brand_name: str
     default_language: str
-    allowed_languages: list
+    allowed_languages: list[str]
     default_chat_mode: str
     ai_enabled: bool
     payment_enabled: bool

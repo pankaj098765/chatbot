@@ -1,4 +1,4 @@
-# 🤖 ChatFlow — Anonymous Stranger Chat Telegram Bot
+# 🤖 Anonymous Chat Bot — White-Label Telegram Bot
 
 A white-label, production-ready Telegram bot for anonymous stranger chat. Buyers can deploy it under their own brand, in any language, with no coding required.
 
@@ -27,7 +27,7 @@ A white-label, production-ready Telegram bot for anonymous stranger chat. Buyers
 ### 1. Clone the repository
 
 ```bash
-git clone https://github.com/your-username/chatbot.git
+git clone https://github.com/<your-username>/chatbot.git
 cd chatbot
 ```
 

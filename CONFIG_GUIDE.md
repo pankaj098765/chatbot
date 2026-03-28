@@ -39,17 +39,17 @@ Only include the fields you want to override — missing fields fall back to `co
 |---|---|
 | **Type** | string |
 | **Default** | `Anonymous Chat` |
-| **Example** | `ChatSpark` |
+| **Example** | `MyChatApp` |
 
 The name of your bot shown in welcome messages, the admin dashboard title, and all user-facing notifications.
 
 ```
 # .env
-BRAND_NAME=ChatSpark
+BRAND_NAME=MyChatApp
 ```
 
 Result in the welcome message:
-> *"Welcome to **ChatSpark**!"*
+> *"Welcome to **MyChatApp**!"*
 
 ---
 
@@ -244,7 +244,7 @@ This is the smallest valid `.env` needed to run the bot with your own branding:
 ```env
 BOT_TOKEN=123456789:ABCdefGHIjklMNOpqrsTUVwxyz
 ADMIN_TOKEN=my-strong-secret-token
-BRAND_NAME=ChatSpark
+BRAND_NAME=MyChatApp
 ```
 
 All other settings will use their defaults from `config/default.json`.
@@ -261,7 +261,7 @@ DB_NAME=anonymous_chat
 ADMIN_TOKEN=my-strong-secret-token
 DEBUG=false
 
-BRAND_NAME=ChatSpark
+BRAND_NAME=MyChatApp
 DEFAULT_LANGUAGE=en
 ALLOWED_LANGUAGES=en,hi,es
 DEFAULT_CHAT_MODE=mixed

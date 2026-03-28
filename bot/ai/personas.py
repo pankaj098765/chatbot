@@ -15,6 +15,9 @@ Added per-persona fields for ultra-realistic Hinglish behaviour:
   question_ignore_rate      — chance of not answering the implicit question
   burst_probability         — chance of splitting reply into 2–3 quick messages
   emotional_mode            — dominant mood label for response pool selection
+  default_tone              — default communication tone for this persona;
+                              overridden by the per-session tone at runtime
+                              "feminine" | "neutral" | "masculine"
 """
 from __future__ import annotations
 
@@ -37,6 +40,7 @@ class Persona:
     burst_probability: float = 0.10           # chance of sending 2-3 rapid follow-up msgs
     emotional_mode: str = "neutral"           # used to pick sub-pool in behavior.py
     weight: float = 1.0                       # relative sampling weight
+    default_tone: str = "neutral"             # "feminine" | "neutral" | "masculine"
 
 
 PERSONAS: dict[str, Persona] = {

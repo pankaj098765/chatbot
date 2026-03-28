@@ -117,10 +117,24 @@ async def clear_session(user_id: int) -> None:
     pipe = _r().pipeline()
     pipe.delete(f"session:{user_id}")
     pipe.delete(f"session_id:{user_id}")
+    pipe.delete(f"session:tone:{user_id}")
     if partner_id:
         pipe.delete(f"session:{partner_id}")
         pipe.delete(f"session_id:{partner_id}")
+        pipe.delete(f"session:tone:{partner_id}")
     await pipe.execute()
+
+
+# ─── Session tone ─────────────────────────────────────────────────────────────
+
+async def set_session_tone(user_id: int, tone: str) -> None:
+    """Store the tone for user_id's current session."""
+    await _r().set(f"session:tone:{user_id}", tone)
+
+
+async def get_session_tone(user_id: int) -> str | None:
+    """Return the tone stored for user_id's current session, or None."""
+    return await _r().get(f"session:tone:{user_id}")
 
 
 # ─── Session message counter ─────────────────────────────────────────────────

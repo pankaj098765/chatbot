@@ -118,7 +118,12 @@ async def increment_user(user_id: int, increments: dict) -> None:
 
 # ─── Session helpers ──────────────────────────────────────────────────────────
 
-async def create_session(session_id: str, user1_id: int, user2_id: int) -> dict:
+async def create_session(
+    session_id: str,
+    user1_id: int,
+    user2_id: int,
+    tone: str = "neutral",
+) -> dict:
     doc: dict[str, Any] = {
         "session_id": session_id,
         "user1_id": user1_id,
@@ -131,6 +136,7 @@ async def create_session(session_id: str, user1_id: int, user2_id: int) -> dict:
         "quality": None,          # "GOOD_CHAT" | "BAD_CHAT" | None
         "is_fallback": False,
         "engagement_score": 0.0,  # Feature 1: computed on session end (NEW)
+        "tone": tone,             # "feminine" | "neutral" | "masculine"
     }
     await _sessions().insert_one(doc)
     doc.pop("_id", None)

@@ -33,6 +33,12 @@ from bot.ai.personas import PERSONAS, Persona
 
 _VALID_TONES = frozenset({"feminine", "neutral", "masculine"})
 
+# ─── LLM cost-control constants ───────────────────────────────────────────────
+# Hard cap on how many times the LLM may be called within one session.
+MAX_LLM_CALLS_PER_SESSION: int = 10
+# LLM is only considered during the early stage of a session (high engagement).
+EARLY_SESSION_MSG_LIMIT: int = 10
+
 # ─── Tone-aware message pools ─────────────────────────────────────────────────
 # Organised as _TONE_MESSAGES[tone][persona_name].
 # Feminine tone:  no "bhai"/"bro"; softer, more indirect phrasing; uses "yaar".
@@ -521,6 +527,7 @@ class BehaviorController:
         )
         self._used_messages: set[str] = set()
         self._message_count: int = 0
+        self._llm_call_count: int = 0   # hard cap on LLM calls per session
         # Short-term context: last few messages sent (for inconsistency logic)
         self._context: list[str] = []
 
@@ -661,12 +668,16 @@ class BehaviorController:
         Async response generator with hybrid LLM + template decision logic.
 
         Decision:
-          60 % → attempt LLM (subject to cost-control guard)
+          60 % → attempt LLM (subject to cost-control guards)
           40 % → use template system directly
 
-        Cost-control guard — LLM is skipped when:
-          • self._message_count >= 10  (session no longer in early stage)
-          • LLM engine returns None    (unavailable / API error)
+        Cost-control guards — LLM is skipped when ANY of these apply:
+          • self._llm_call_count >= MAX_LLM_CALLS_PER_SESSION  (hard session cap)
+          • self._message_count > EARLY_SESSION_MSG_LIMIT       (session no longer early)
+          • LLM engine returns None (unavailable / API error)
+
+        For non-Hinglish native/mixed modes the probability is raised to 90 %
+        so language-accurate output is served by the LLM, not generic templates.
 
         On LLM failure the method seamlessly falls back to the template system.
 
@@ -695,7 +706,7 @@ class BehaviorController:
             return [tc]
 
         # ── Hybrid LLM / template decision ───────────────────────────────────
-        # Cost-control: LLM is only worthwhile in the early stage (first 10 msgs).
+        # Cost-control: LLM is only worthwhile in the early stage (first N msgs).
         # For non-Hinglish native/mixed modes, boost LLM probability to 90% so
         # the LLM handles language-specific output (Spanglish, Franglais, etc.)
         # rather than falling back to generic English templates.
@@ -706,9 +717,10 @@ class BehaviorController:
         )
         _llm_prob = 0.90 if _is_non_english_mode else 0.60
         use_llm = (
-            random.random() < _llm_prob     # probability gate (boosted for non-hi modes)
-            and self._message_count <= 10   # early session stage
-            and user_message                # only when we have user context
+            random.random() < _llm_prob                                  # probability gate
+            and self._message_count <= EARLY_SESSION_MSG_LIMIT           # early session
+            and self._llm_call_count < MAX_LLM_CALLS_PER_SESSION         # hard cap
+            and user_message                                              # need user context
         )
 
         if use_llm:
@@ -722,9 +734,11 @@ class BehaviorController:
                 "emotional_state": self._persona.emotional_mode,
                 "native_language": self._native_language,  # UPDATED
                 "language_mode": self._language_mode,       # UPDATED
+                "chat_language": self._native_language,     # AI channel language
             }
             llm_msgs = await generate_llm_response(context)
             if llm_msgs:
+                self._llm_call_count += 1
                 for msg in llm_msgs:
                     self._context.append(msg)
                 if len(self._context) > 10:

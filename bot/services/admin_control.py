@@ -22,6 +22,10 @@ language_mode      str    — "english" | "native" | "mixed"                # UP
 native_language    str    — ISO 639-1 code for the native language         # UPDATED
                             e.g. "hi" (Hindi), "es" (Spanish), "fr" (French)
                             Used when language_mode is "native" or "mixed".
+ui_language        str    — ISO 639-1 code used for UI strings (buttons/menus).
+                            Defaults to derived value from language_mode+native_language.
+chat_language      str    — ISO 639-1 code the LLM/AI uses for response generation.
+                            Defaults to native_language.
 
 Usage
 -----
@@ -43,6 +47,9 @@ _DEFAULTS: dict[str, object] = {
     # UPDATED: seeded from app_config so buyer's config.json / .env takes effect immediately
     "language_mode": app_config.language_mode,
     "native_language": app_config.native_language,
+    # Separate channels: UI strings vs AI language
+    "ui_language": app_config.ui_language,
+    "chat_language": app_config.chat_language,
 }
 
 

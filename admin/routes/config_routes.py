@@ -24,6 +24,9 @@ class ConfigUpdate(BaseModel):
     # UPDATED: primary language configuration — admin-controlled white-label
     language_mode: str | None = None      # "english" | "native" | "mixed"
     native_language: str | None = None    # ISO 639-1 code, e.g. "hi", "es", "fr"
+    # Separate UI vs AI language channels
+    ui_language: str | None = None        # ISO 639-1 code for buttons/menus
+    chat_language: str | None = None      # ISO 639-1 code for LLM/AI responses
 
     @field_validator("fallback_rate")
     @classmethod
@@ -74,6 +77,38 @@ class ConfigUpdate(BaseModel):
                 f"Must be one of: {supported}"
             )
         return v
+
+    @field_validator("ui_language")
+    @classmethod
+    def validate_ui_language(cls, v: str | None) -> str | None:
+        if v is None:
+            return v
+        v = v.strip().lower()
+        if v not in SUPPORTED_LANGUAGES:
+            supported = ", ".join(sorted(SUPPORTED_LANGUAGES.keys()))
+            raise ValueError(
+                f"ui_language '{v}' is not supported. Must be one of: {supported}"
+            )
+        return v
+
+    @field_validator("chat_language")
+    @classmethod
+    def validate_chat_language(cls, v: str | None) -> str | None:
+        if v is None:
+            return v
+        v = v.strip().lower()
+        if v not in SUPPORTED_LANGUAGES:
+            supported = ", ".join(sorted(SUPPORTED_LANGUAGES.keys()))
+            raise ValueError(
+                f"chat_language '{v}' is not supported. Must be one of: {supported}"
+            )
+        return v
+
+
+@router.get("/languages", dependencies=[Depends(require_admin)])
+async def get_languages() -> dict:
+    """Return the full map of supported language codes to display names."""
+    return {"languages": SUPPORTED_LANGUAGES}
 
 
 @router.get("/config", dependencies=[Depends(require_admin)])

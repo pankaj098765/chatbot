@@ -17,6 +17,10 @@ language_mode     "english" | "native" | "mixed"  — controls how the bot speak
 native_language   ISO 639-1 code for the native language (e.g. "hi", "es", "fr").
                   Used when language_mode is "native" or "mixed".
                   ADMIN-CONTROLLED ONLY — users cannot override this.
+ui_language       ISO 639-1 code used for UI strings (buttons, menus).
+                  Defaults to the derived language from language_mode + native_language.
+chat_language     ISO 639-1 code used by the AI / LLM for response generation.
+                  Defaults to native_language so the AI speaks the right language.
 ai_enabled        Enable LLM-powered fallback responses (requires OPENAI_API_KEY).
 payment_enabled   Enable Telegram Stars payment commands (/pay, /vip).
 """
@@ -40,15 +44,11 @@ class AppConfig:
     # UPDATED: primary language config (admin-only, white-label)
     language_mode: str          # "english" | "native" | "mixed"
     native_language: str        # ISO 639-1 code, e.g. "hi", "es", "fr"
+    # Separate UI vs AI language channels
+    ui_language: str            # ISO 639-1 code for button/menu strings
+    chat_language: str          # ISO 639-1 code used by the LLM/AI
     ai_enabled: bool
     payment_enabled: bool
-
-    @property
-    def ui_language(self) -> str:
-        """Derive the UI display language from language_mode + native_language."""
-        if self.language_mode == "english":
-            return "en"
-        return self.native_language
 
 
 def _load_json(path: Path) -> dict:
@@ -105,10 +105,25 @@ def _get_app_config() -> AppConfig:
         merged.get("payment_enabled", True)
     )
 
+    # ui_language: language for buttons/menus — defaults to derived value
+    _derived_ui = "en" if language_mode == "english" else native_language
+    ui_language = (
+        os.getenv("UI_LANGUAGE")
+        or str(merged.get("ui_language", _derived_ui))
+    ).strip().lower() or _derived_ui
+
+    # chat_language: language the AI speaks — defaults to native_language
+    chat_language = (
+        os.getenv("CHAT_LANGUAGE")
+        or str(merged.get("chat_language", native_language))
+    ).strip().lower() or native_language
+
     return AppConfig(
         brand_name=brand_name,
         language_mode=language_mode,
         native_language=native_language,
+        ui_language=ui_language,
+        chat_language=chat_language,
         ai_enabled=ai_enabled,
         payment_enabled=payment_enabled,
     )

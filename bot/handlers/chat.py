@@ -6,6 +6,13 @@ Fix #1:  Feedback handler now calls experience.update_feedback_score to update
 Fix #9:  Incoming messages are scanned for gender-check intent ("m", "m?", etc.)
          Users showing this intent get their priority reduced and are flagged
          so they preferentially match with others doing the same.
+
+# UPDATED
+Feature 1: Each relayed message records a per-user timestamp in Redis so
+           session.compute_engagement_score can calculate reply_ratio and
+           response_delay_variance when the session ends.
+Feature 4: Post-session exit experience messages are triggered via
+           session.end_session(bot=bot) in the search handlers.
 """
 from __future__ import annotations
 
@@ -69,6 +76,8 @@ async def relay_message(message: Message, state: FSMContext, bot: Bot) -> None:
         if session_id:
             await redis.increment_message_count(session_id)
             await db.increment_session_messages(session_id)
+            # Feature 1: Record per-user message timestamp for engagement scoring
+            await redis.record_user_message_time(session_id, user_id)
     except Exception:
         await message.answer(
             "⚠️ Could not deliver your message. Your partner may have disconnected.\n"

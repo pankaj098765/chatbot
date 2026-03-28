@@ -25,6 +25,12 @@ Churn Detection (Fix #3)
 ------------------------------------------
   Tracks last_3_session_durations.
   If avg_session_duration < 20s → churn_risk = HIGH.
+
+# UPDATED
+Feature 5: First-session experience boost — forces MATCH_REAL for total_searches == 0.
+Feature 8: Emotional experience detection — classifies session as satisfied/neutral/
+           frustrated from message frequency, reply engagement, and abrupt exits.
+           Boosts next match routing if user is frustrated.
 """
 from __future__ import annotations
 
@@ -42,6 +48,11 @@ _P_RETRY_CUTOFF = 0.90
 # Fix #3: Churn risk threshold (seconds)
 _CHURN_DURATION_THRESHOLD = 20.0
 
+# Feature 8: Emotional detection thresholds
+_SATISFIED_ENGAGEMENT_THRESHOLD = 4.0
+_FRUSTRATED_DURATION_THRESHOLD = 30.0
+_FRUSTRATED_MSG_THRESHOLD = 3
+
 
 def _calc_frustration(last_5: list[str]) -> int:
     score = 0
@@ -55,11 +66,50 @@ def _calc_frustration(last_5: list[str]) -> int:
     return max(0, score)
 
 
+# ─── Feature 8: Emotional experience detection ───────────────────────────────
+
+def _detect_emotional_state(
+    outcome: str,
+    session_duration: float,
+    message_count: int,
+    exit_reason: str,
+    engagement_score: float,
+    frustration: int,
+) -> str:
+    """
+    # NEW
+    Classify a user's emotional state from session signals.
+
+    Returns: "satisfied" | "neutral" | "frustrated"
+    """
+    # Abrupt exit with almost no interaction → frustrated
+    if (
+        exit_reason in ("next", "stop")
+        and session_duration < _FRUSTRATED_DURATION_THRESHOLD
+        and message_count < _FRUSTRATED_MSG_THRESHOLD
+    ):
+        return "frustrated"
+
+    # High engagement or good outcome → satisfied
+    if outcome == "GOOD_CHAT" or engagement_score >= _SATISFIED_ENGAGEMENT_THRESHOLD:
+        return "satisfied"
+
+    # Accumulated frustration pattern → frustrated
+    if frustration >= 5:
+        return "frustrated"
+
+    return "neutral"
+
+
 def decide_next_action(user: dict) -> Action:
     """Decide what the matchmaking service should do next for this user."""
     total = user.get("total_searches", 0)
     last_5: list[str] = user.get("last_5_results", [])
     frustration = _calc_frustration(last_5)
+
+    # Feature 5: First-session experience boost — guarantee a real match attempt
+    if total == 0:
+        return "MATCH_REAL"
 
     # Rule 1 — new-user grace period (also satisfies Fix #4)
     if total <= 3:
@@ -67,6 +117,10 @@ def decide_next_action(user: dict) -> Action:
 
     # Rule 2 — frustrated user, give a real match to restore confidence
     if frustration >= 5:
+        return "MATCH_REAL"
+
+    # Feature 8: Emotional state boost — frustrated user detected this session
+    if user.get("emotional_state") == "frustrated":
         return "MATCH_REAL"
 
     # Rule 3 — two consecutive failures
@@ -96,6 +150,9 @@ async def record_outcome(
     user_id: int,
     outcome: Outcome,
     session_duration: float | None = None,
+    exit_reason: str = "stop",
+    message_count: int = 0,
+    engagement_score: float = 0.0,
 ) -> None:
     """
     Persist a match outcome and recalculate the frustration score.
@@ -106,6 +163,11 @@ async def record_outcome(
       - success_count (incremented on GOOD_CHAT)
       - total_searches (always incremented)
       - last_3_session_durations + avg_session_duration + churn_risk (Fix #3)
+
+    # UPDATED
+    Feature 1: Stores engagement_score alongside the outcome.
+    Feature 8: Derives emotional_state from session signals and persists it
+               so decide_next_action can use it on the very next search.
     """
     user = await db.get_user(user_id)
     if not user:
@@ -118,9 +180,21 @@ async def record_outcome(
 
     frustration = _calc_frustration(last_5)
 
+    # Feature 8: Detect emotional state from session signals
+    emotional_state = _detect_emotional_state(
+        outcome=outcome,
+        session_duration=session_duration or 0.0,
+        message_count=message_count,
+        exit_reason=exit_reason,
+        engagement_score=engagement_score,
+        frustration=frustration,
+    )
+
     updates: dict = {
         "last_5_results": last_5,
         "frustration_score": frustration,
+        "emotional_state": emotional_state,        # Feature 8
+        "last_engagement_score": engagement_score,  # Feature 1
     }
     increments: dict = {"total_searches": 1}
     if outcome == "GOOD_CHAT":

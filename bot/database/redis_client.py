@@ -228,3 +228,94 @@ async def get_warm_start(user_id: int) -> dict | None:
     if not results[0]:
         return None
     return {"session_type": results[0], "outcome": results[1]}
+
+
+# ─── Per-user message tracking for engagement scoring (NEW) ──────────────────
+
+async def record_user_message_time(session_id: str, user_id: int) -> None:
+    """Record a message timestamp for per-user engagement scoring."""
+    key = f"session:msg_times:{session_id}:{user_id}"
+    await _r().rpush(key, str(time.time()))
+    await _r().expire(key, 7200)
+
+
+async def get_user_message_times(session_id: str, user_id: int) -> list[float]:
+    """Return all message timestamps for a user in a session."""
+    key = f"session:msg_times:{session_id}:{user_id}"
+    vals = await _r().lrange(key, 0, -1)
+    return [float(v) for v in vals]
+
+
+async def clear_user_message_data(session_id: str, user_ids: list[int]) -> None:
+    """Remove per-user message tracking keys on session end."""
+    keys = [f"session:msg_times:{session_id}:{uid}" for uid in user_ids]
+    if keys:
+        await _r().delete(*keys)
+
+
+# ─── Global persona usage stats (NEW) ────────────────────────────────────────
+
+async def increment_persona_usage(persona_name: str) -> None:
+    """Increment the global usage counter for a persona."""
+    await _r().hincrby("global:persona_usage", persona_name, 1)
+
+
+async def get_all_persona_usage() -> dict[str, int]:
+    """Return global persona usage counts."""
+    raw = await _r().hgetall("global:persona_usage")
+    return {k: int(v) for k, v in raw.items()}
+
+
+# ─── Global pattern tracking (NEW) ───────────────────────────────────────────
+
+async def set_global_patterns(patterns: dict) -> None:
+    """Store last-used global patterns to detect and avoid repetition."""
+    mapping = {k: str(v) for k, v in patterns.items()}
+    await _r().hset("global:patterns", mapping=mapping)
+    await _r().expire("global:patterns", 3600)
+
+
+async def get_global_patterns() -> dict[str, str]:
+    """Retrieve last-used global patterns."""
+    return await _r().hgetall("global:patterns")
+
+
+# ─── Admin config (NEW) ───────────────────────────────────────────────────────
+
+ADMIN_CONFIG_KEY = "admin:config"
+
+
+async def get_admin_config_raw() -> dict[str, str]:
+    """Retrieve raw admin config hash from Redis."""
+    return await _r().hgetall(ADMIN_CONFIG_KEY)
+
+
+async def set_admin_config_value(key: str, value: object) -> None:
+    """Set a single admin config value."""
+    await _r().hset(ADMIN_CONFIG_KEY, key, str(value))
+
+
+async def set_admin_config_bulk(mapping: dict) -> None:
+    """Set multiple admin config values at once."""
+    await _r().hset(ADMIN_CONFIG_KEY, mapping={k: str(v) for k, v in mapping.items()})
+
+
+# ─── Gender queue stats (NEW) ─────────────────────────────────────────────────
+
+async def set_gender_queue_stats(male_count: int, female_count: int) -> None:
+    """Store current gender distribution in the matchmaking queue."""
+    pipe = _r().pipeline()
+    pipe.set("queue:gender:male", male_count, ex=120)
+    pipe.set("queue:gender:female", female_count, ex=120)
+    await pipe.execute()
+
+
+async def get_gender_queue_stats() -> tuple[int, int]:
+    """Return (male_count, female_count) from the cache."""
+    pipe = _r().pipeline()
+    pipe.get("queue:gender:male")
+    pipe.get("queue:gender:female")
+    results = await pipe.execute()
+    male = int(results[0]) if results[0] else 0
+    female = int(results[1]) if results[1] else 0
+    return male, female

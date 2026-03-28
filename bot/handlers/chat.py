@@ -13,6 +13,7 @@ Feature 1: Each relayed message records a per-user timestamp in Redis so
            response_delay_variance when the session ends.
 Feature 4: Post-session exit experience messages are triggered via
            session.end_session(bot=bot) in the search handlers.
+Multilingual: all user-facing strings use t() with the user's ui_language.
 """
 from __future__ import annotations
 
@@ -22,7 +23,8 @@ from aiogram.types import CallbackQuery, Message
 
 from bot.database import mongodb as db
 from bot.database import redis_client as redis
-from bot.keyboards.inline import search_keyboard
+from bot.i18n import lang_of, t
+from bot.keyboards.inline import feedback_keyboard, search_keyboard
 from bot.services import anti_abuse, experience
 from bot.services.analytics import track_feedback
 from bot.services.matchmaking import calc_priority_score
@@ -45,12 +47,13 @@ async def relay_message(message: Message, state: FSMContext, bot: Bot) -> None:
     user_id = message.from_user.id  # type: ignore[union-attr]
     text = message.text or ""
 
+    user = await db.get_user(user_id)
+    lang = lang_of(user)
+
     # Abuse check
     bad_score = await anti_abuse.check_and_score_message(user_id, text)
     if bad_score >= 10:
-        await message.answer(
-            "⚠️ You've been restricted for a short period due to policy violations."
-        )
+        await message.answer(t("abuse_restricted", lang))
         return
 
     # Fix #9: Intent detection — detect gender-check messages
@@ -58,7 +61,6 @@ async def relay_message(message: Message, state: FSMContext, bot: Bot) -> None:
     if normalized in _GENDER_CHECK_PATTERNS:
         await db.update_user(user_id, {"intent": "gender_check"})
         # Slightly deprioritise this user so gender-check users cluster together
-        user = await db.get_user(user_id)
         if user:
             new_score = calc_priority_score(user) - 15
             await redis.add_to_queue(user_id, new_score)
@@ -81,10 +83,7 @@ async def relay_message(message: Message, state: FSMContext, bot: Bot) -> None:
             # Feature 1: Record per-user message timestamp for engagement scoring
             await redis.record_user_message_time(session_id, user_id)
     except Exception:
-        await message.answer(
-            "⚠️ Could not deliver your message. Your partner may have disconnected.\n"
-            "Use /next to find a new stranger."
-        )
+        await message.answer(t("delivery_failed", lang))
 
 
 # ─── Gender selection callback ────────────────────────────────────────────────
@@ -95,11 +94,15 @@ async def cb_gender(callback: CallbackQuery, state: FSMContext) -> None:
     user_id = callback.from_user.id
     gender = "male" if callback.data == "gender_male" else "female"
     await db.update_user(user_id, {"gender": gender})
+
+    user = await db.get_user(user_id)
+    lang = lang_of(user)
+    key = "gender_set_male" if gender == "male" else "gender_set_female"
+
     await callback.message.edit_text(  # type: ignore[union-attr]
-        f"✅ Gender set to <b>{'Male' if gender == 'male' else 'Female'}</b>.\n\n"
-        "Use /search to find a stranger!",
+        t(key, lang),
         parse_mode="HTML",
-        reply_markup=search_keyboard(),
+        reply_markup=search_keyboard(lang),
     )
     await state.set_state(UserState.IDLE)
 
@@ -120,7 +123,10 @@ async def cb_feedback(callback: CallbackQuery) -> None:
     # Fix #1: Update feedback counters for priority scoring
     await experience.update_feedback_score(user_id, positive=(rating == "good"))
 
+    user = await db.get_user(user_id)
+    lang = lang_of(user)
+
     await callback.message.edit_text(  # type: ignore[union-attr]
-        "Thanks for your feedback! 🙏\n\nUse /search to find a new stranger.",
-        reply_markup=search_keyboard(),
+        t("feedback_thanks", lang),
+        reply_markup=search_keyboard(lang),
     )

@@ -65,6 +65,10 @@ async def create_user(user_id: int, username: str | None = None) -> dict:
         "username": username,
         "gender": None,          # "male" | "female" | None
         "language": "en",
+        # UPDATED: language preference fields
+        "ui_language": "en",     # ISO 639-1 code for bot UI messages
+        "chat_language": "en",   # ISO 639-1 code for chat/LLM language
+        "chat_mode": "mixed",    # "english" | "native" | "mixed"
         "is_premium": False,
         "is_vip": False,
         "premium_expires": None,

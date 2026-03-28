@@ -406,6 +406,8 @@ class BehaviorController:
         persona_name: str | None = None,
         randomness_level: float = 0.5,  # Feature 6: 0.3 (low) → 0.7 (high)
         tone: str = "neutral",          # "feminine" | "neutral" | "masculine"
+        language: str = "en",           # NEW: ISO 639-1 chat language
+        mode: str = "mixed",            # NEW: "english" | "native" | "mixed"
     ) -> None:
         self._persona: Persona = (
             PERSONAS[persona_name] if persona_name and persona_name in PERSONAS
@@ -414,6 +416,9 @@ class BehaviorController:
         self._randomness_level: float = max(0.3, min(0.7, randomness_level))
         # Tone is fixed at construction — session-consistent, never changes.
         self._tone: str = tone if tone in _VALID_TONES else "neutral"
+        # UPDATED: language and chat mode are fixed at construction per session
+        self._language: str = language or "en"
+        self._mode: str = mode if mode in ("english", "native", "mixed") else "mixed"
         self._used_messages: set[str] = set()
         self._message_count: int = 0
         # Short-term context: last few messages sent (for inconsistency logic)
@@ -580,6 +585,8 @@ class BehaviorController:
                 "tone": self._tone,
                 "history": list(self._context[-3:]),
                 "emotional_state": self._persona.emotional_mode,
+                "language": self._language,  # UPDATED
+                "mode": self._mode,          # UPDATED
             }
             llm_msgs = await generate_llm_response(context)
             if llm_msgs:

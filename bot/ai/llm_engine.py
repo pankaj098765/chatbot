@@ -1,8 +1,8 @@
 """
-bot/ai/llm_engine.py — LLM-powered Hinglish response generator.
+bot/ai/llm_engine.py — LLM-powered multilingual response generator.
 
 Wraps an OpenAI-compatible chat completion endpoint to produce ultra-realistic,
-gender-aware Hinglish replies for the fallback chat engine.
+language-aware replies for the fallback chat engine.
 
 Design principles:
   - Async-safe: uses openai.AsyncOpenAI under the hood
@@ -10,6 +10,9 @@ Design principles:
   - Short output: prompt constrains LLM to 1–2 lines; response is hard-clamped
   - Anti-detection: applies random typo / shortening / message split after LLM
   - Filter: strips AI-sounding phrases and overly formal language
+
+# UPDATED: prompt is now fully dynamic — driven by chat_language + chat_mode
+  so the LLM responds in the user's chosen language and communication style.
 """
 from __future__ import annotations
 
@@ -41,12 +44,68 @@ def _get_client():
     return _client
 
 
-# ─── Prompt template (exact as specified) ─────────────────────────────────────
+# ─── Language + mode instruction builder ─────────────────────────────────────
+
+# Human-readable names for ISO codes used in the prompt so the LLM can apply
+# the right language without needing to know every 2-letter code.
+_LANG_NAMES: dict[str, str] = {
+    "en": "English",
+    "hi": "Hindi",
+    "es": "Spanish",
+    "fr": "French",
+    "de": "German",
+    "pt": "Portuguese",
+    "ar": "Arabic",
+    "ru": "Russian",
+    "tr": "Turkish",
+    "id": "Indonesian",
+}
+
+
+def _build_language_instruction(chat_language: str, chat_mode: str) -> str:
+    """# NEW
+    Return the language/style instruction block that is injected into the
+    system prompt based on the user's chat_language and chat_mode settings.
+
+    Modes
+    -----
+    english  → always respond in English regardless of chat_language
+    native   → respond entirely in chat_language (no English mixing)
+    mixed    → mix English with chat_language (e.g. Hinglish for hi)
+    """
+    lang_name = _LANG_NAMES.get(chat_language, chat_language.upper())
+
+    if chat_mode == "english":
+        return (
+            "Language: English\n"
+            "Style: Respond entirely in English.\n"
+        )
+    if chat_mode == "native":
+        return (
+            f"Language: {lang_name}\n"
+            f"Style: Respond entirely in {lang_name}. Do NOT mix in English words.\n"
+        )
+    # default: mixed
+    if chat_language == "en":
+        # mixed + English is just plain English
+        return (
+            "Language: English\n"
+            "Style: Respond in natural casual English.\n"
+        )
+    return (
+        f"Language: {lang_name} + English mix\n"
+        f"Style: Use a natural mix of English and {lang_name} "
+        f"(e.g. {'Hinglish' if chat_language == 'hi' else lang_name + '-English'}). "
+        "Switch naturally between the two languages mid-sentence.\n"
+    )
+
+
+# ─── Prompt template ──────────────────────────────────────────────────────────
 
 _PROMPT_TEMPLATE = (
-    "You are a real human girl chatting casually in Hinglish on Telegram.\n\n"
+    "You are a real human chatting casually on Telegram.\n\n"
+    "{language_instruction}"
     "Rules:\n"
-    "* Use natural Hinglish (Hindi + English mix)\n"
     "* Keep messages short (max 1–2 lines)\n"
     "* Avoid perfect grammar\n"
     "* Sometimes use emojis 😄😅😂✨\n"
@@ -58,7 +117,7 @@ _PROMPT_TEMPLATE = (
     "Mood: {emotional_state}\n\n"
     "Conversation:\n"
     "User: {user_message}\n\n"
-    "Reply like a real girl (natural, short, imperfect):"
+    "Reply (natural, short, imperfect):"
 )
 
 # ─── AI-sounding phrases to strip ─────────────────────────────────────────────
@@ -174,7 +233,7 @@ def apply_anti_detection(text: str) -> list[str]:
 
 async def generate_llm_response(context: dict) -> list[str] | None:
     """
-    Generate a short Hinglish response using the LLM.
+    Generate a short language-aware response using the LLM.
 
     context = {
         "user_message":    str,          # last message from the user (may be "")
@@ -182,6 +241,8 @@ async def generate_llm_response(context: dict) -> list[str] | None:
         "tone":            str,          # "feminine" | "neutral" | "masculine"
         "history":         list[str],    # last ≤3 messages sent by the bot
         "emotional_state": str,          # "neutral" | "playful" | "shy"
+        "language":        str,          # NEW — ISO 639-1 code, e.g. "hi"
+        "mode":            str,          # NEW — "english" | "native" | "mixed"
     }
 
     Returns a list[str] on success (1–2 messages after anti-detection), or
@@ -195,9 +256,16 @@ async def generate_llm_response(context: dict) -> list[str] | None:
     persona = context.get("persona", "friendly")
     emotional_state = context.get("emotional_state", "neutral")
     history: list[str] = context.get("history", [])
+    # UPDATED: pick up language/mode from context; fall back to mixed English
+    chat_language: str = context.get("language", "en")
+    chat_mode: str = context.get("mode", "mixed")
+
+    # UPDATED: build dynamic language instruction
+    language_instruction = _build_language_instruction(chat_language, chat_mode)
 
     # Build system prompt
     system_prompt = _PROMPT_TEMPLATE.format(
+        language_instruction=language_instruction,
         persona=persona,
         emotional_state=emotional_state,
         user_message=user_message or "...",
@@ -231,3 +299,4 @@ async def generate_llm_response(context: dict) -> list[str] | None:
         return None
 
     return apply_anti_detection(filtered)
+

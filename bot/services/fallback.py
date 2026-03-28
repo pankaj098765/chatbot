@@ -21,6 +21,9 @@ Feature 6:  Randomness Limiter — reads randomness_level from admin config and
             passes it to BehaviorController.
 Feature 9:  Global Pattern Breaker — avoids reusing the same persona/style that
             was recorded as the last global pattern.
+Multilingual: Reads user's chat_language + chat_mode and passes them to
+              BehaviorController so LLM responses are rendered in the right
+              language and style.  Greeting and disconnect messages use t().
 Ultra-human upgrade:
   - generate_response() now returns list[str]; bursts are sent with short delays.
   - Typing action (chat_action) is sent before each message for realism.
@@ -39,6 +42,7 @@ from bot.ai.behavior import BehaviorController
 from bot.ai.personas import PERSONAS
 from bot.database import mongodb as db
 from bot.database import redis_client as redis
+from bot.i18n import lang_of, t
 from bot.services import admin_control
 from bot.utils.helpers import generate_session_id
 
@@ -137,6 +141,9 @@ async def start_fallback_session(bot: Bot, user_id: int) -> None:
     Tone system: Derives tone from user's gender profile (female → "feminine",
                  male → "masculine", unset → "neutral"); tone is passed to
                  BehaviorController and stored in session for consistency.
+    Multilingual: Reads chat_language + chat_mode from user profile and passes
+                  them to BehaviorController so the LLM/template responds in the
+                  user's configured language and style.
     Ultra-human: Handles list[str] bursts from generate_response(); sends
                  typing indicators before each message.
     """
@@ -164,6 +171,11 @@ async def start_fallback_session(bot: Bot, user_id: int) -> None:
     else:
         tone = "neutral"
 
+    # UPDATED: read language settings from user profile
+    lang = lang_of(user)                                         # ui language for t()
+    chat_language: str = (user.get("chat_language") if user else None) or "en"
+    chat_mode: str = (user.get("chat_mode") if user else None) or "mixed"
+
     # Feature 9: Read current global patterns before picking persona
     global_patterns = await redis.get_global_patterns()
 
@@ -173,6 +185,8 @@ async def start_fallback_session(bot: Bot, user_id: int) -> None:
         persona_name=persona_name,
         randomness_level=randomness_level,  # Feature 6
         tone=tone,                          # Tone system
+        language=chat_language,             # UPDATED: multilingual
+        mode=chat_mode,                     # UPDATED: multilingual
     )
     await _record_persona_used(user_id, persona_name)
 
@@ -186,10 +200,10 @@ async def start_fallback_session(bot: Bot, user_id: int) -> None:
     await redis.set_session(user_id, _FALLBACK_PARTNER_ID, session_id)
     await redis.set_session_tone(user_id, tone)
 
-    # Opening message after a short delay
+    # Opening message after a short delay — UPDATED: use t() for localisation
     await asyncio.sleep(controller.get_delay())
     try:
-        await _send_with_typing(bot, user_id, "Hey! 👋")
+        await _send_with_typing(bot, user_id, t("fallback_greeting", lang))
         message_count += 1
     except Exception:
         await redis.clear_session(user_id)
@@ -227,13 +241,13 @@ async def start_fallback_session(bot: Bot, user_id: int) -> None:
         except Exception:
             break
 
-    # Natural exit
+    # Natural exit — UPDATED: use t() for localised disconnect message
     try:
         exit_msg = controller.exit_message()
         await _send_with_typing(bot, user_id, exit_msg)
         await bot.send_message(
             user_id,
-            "Your partner has disconnected.\n\nTap /search to find a new stranger!",
+            t("partner_disconnected", lang),
         )
     except Exception:
         pass
@@ -244,3 +258,4 @@ async def start_fallback_session(bot: Bot, user_id: int) -> None:
 def launch_fallback(bot: Bot, user_id: int) -> None:
     """Schedule the fallback session as a background asyncio task."""
     asyncio.create_task(start_fallback_session(bot, user_id))
+

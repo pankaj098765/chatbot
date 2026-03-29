@@ -36,8 +36,11 @@ _VALID_TONES = frozenset({"feminine", "neutral", "masculine"})
 # ─── LLM cost-control constants ───────────────────────────────────────────────
 # Hard cap on how many times the LLM may be called within one session.
 MAX_LLM_CALLS_PER_SESSION: int = 10
-# LLM is only considered during the early stage of a session (high engagement).
+# LLM is only considered during the early stage of a session.
 EARLY_SESSION_MSG_LIMIT: int = 10
+# Minimum engagement_score (from prior session) required to use LLM.
+# Users with no history (score == 0.0) are also allowed LLM on their first session.
+LLM_ENGAGEMENT_THRESHOLD: float = 3.0
 
 # ─── Tone-aware message pools ─────────────────────────────────────────────────
 # Organised as _TONE_MESSAGES[tone][persona_name].
@@ -512,6 +515,7 @@ class BehaviorController:
         tone: str = "neutral",          # "feminine" | "neutral" | "masculine"
         native_language: str = "en",    # UPDATED: ISO 639-1 code from admin config
         language_mode: str = "english", # UPDATED: "english" | "native" | "mixed"
+        engagement_score: float = 0.0,  # Smart LLM: prior-session engagement score
     ) -> None:
         self._persona: Persona = (
             PERSONAS[persona_name] if persona_name and persona_name in PERSONAS
@@ -525,6 +529,9 @@ class BehaviorController:
         self._language_mode: str = (
             language_mode if language_mode in ("english", "native", "mixed") else "english"
         )
+        # Smart LLM: engagement score from the user's previous session.
+        # -1.0 is the sentinel for "no prior session" (first-session users).
+        self._engagement_score: float = engagement_score
         self._used_messages: set[str] = set()
         self._message_count: int = 0
         self._llm_call_count: int = 0   # hard cap on LLM calls per session
@@ -706,18 +713,18 @@ class BehaviorController:
             return [tc]
 
         # ── Hybrid LLM / template decision ───────────────────────────────────
-        # Cost-control: LLM is only worthwhile in the early stage (first N msgs).
-        # For non-Hinglish native/mixed modes, boost LLM probability to 90% so
-        # the LLM handles language-specific output (Spanglish, Franglais, etc.)
-        # rather than falling back to generic English templates.
-        _is_non_english_mode = (
-            self._language_mode in ("native", "mixed")
-            and self._native_language != "en"
-            and not self._use_hinglish   # Hinglish has its own template pools
+        # Smart LLM: only call the LLM when the user is engaged (high prior-session
+        # engagement score) AND we are still in the early part of the session.
+        # -1.0 is the sentinel for "no prior session" (first-session users who
+        # should always get LLM for a strong first impression).  Low-engagement
+        # returning users (score in [0.0, threshold)) fall through to templates,
+        # saving API costs without hurting highly engaged users.
+        _is_high_engagement = (
+            self._engagement_score < 0                                 # first-session sentinel
+            or self._engagement_score >= LLM_ENGAGEMENT_THRESHOLD      # engaged returning user
         )
-        _llm_prob = 0.90 if _is_non_english_mode else 0.60
         use_llm = (
-            random.random() < _llm_prob                                  # probability gate
+            _is_high_engagement                                          # smart: engagement gate
             and self._message_count <= EARLY_SESSION_MSG_LIMIT           # early session
             and self._llm_call_count < MAX_LLM_CALLS_PER_SESSION         # hard cap
             and user_message                                              # need user context

@@ -171,6 +171,15 @@ async def start_fallback_session(bot: Bot, user_id: int) -> None:
     else:
         tone = "neutral"
 
+    # Smart LLM: read prior-session engagement score so BehaviorController
+    # can decide whether to call the LLM or fall back to templates.
+    # Use -1.0 as a sentinel for "no history yet" (first-session users) so
+    # the controller can distinguish them from low-but-recorded engagement.
+    engagement_score: float = (
+        -1.0 if is_first_session
+        else float(user.get("last_engagement_score", 0.0) if user else 0.0)
+    )
+
     # UPDATED: read global language config — NOT per-user language fields
     lang = await get_ui_lang()                                   # ui language for t()
     chat_language: str = str(config.get("native_language", "en"))
@@ -187,6 +196,7 @@ async def start_fallback_session(bot: Bot, user_id: int) -> None:
         tone=tone,                          # Tone system
         native_language=chat_language,      # UPDATED: global language_mode/native_language
         language_mode=chat_mode,            # UPDATED: global language_mode/native_language
+        engagement_score=engagement_score,  # Smart LLM: prior engagement gate
     )
     await _record_persona_used(user_id, persona_name)
 

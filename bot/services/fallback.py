@@ -210,10 +210,11 @@ async def start_fallback_session(bot: Bot, user_id: int) -> None:
     await redis.set_session(user_id, _FALLBACK_PARTNER_ID, session_id)
     await redis.set_session_tone(user_id, tone)
 
-    # Opening message after a short delay — UPDATED: use t() for localisation
+    # Opening message after a short delay — use chat_language so the simulated
+    # partner speaks in the correct language, while system messages use ui_language.
     await asyncio.sleep(controller.get_delay())
     try:
-        await _send_with_typing(bot, user_id, t("fallback_greeting", lang))
+        await _send_with_typing(bot, user_id, t("fallback_greeting", chat_language))
         message_count += 1
     except Exception:
         await redis.clear_session(user_id)
@@ -251,9 +252,9 @@ async def start_fallback_session(bot: Bot, user_id: int) -> None:
         except Exception:
             break
 
-    # Natural exit — UPDATED: use t() for localised disconnect message
+    # Natural exit — chat message uses chat_language; system disconnect notice uses ui_language
     try:
-        exit_msg = controller.exit_message()
+        exit_msg = await controller.exit_message_async(chat_language)
         await _send_with_typing(bot, user_id, exit_msg)
         await bot.send_message(
             user_id,

@@ -672,21 +672,20 @@ class BehaviorController:
         user_message: str = "",
     ) -> list[str]:
         """
-        Async response generator with hybrid LLM + template decision logic.
+        Async response generator with language-aware LLM + template decision logic.
 
-        Decision:
-          60 % → attempt LLM (subject to cost-control guards)
-          40 % → use template system directly
+        Non-English mode (native_language != "en" AND language_mode != "english"):
+          • ALWAYS route through the LLM — English/Hinglish template pools must
+            never be served to users expecting a different language.
+          • Retry the LLM once on failure before falling back to a translated
+            i18n phrase (t("fallback_greeting", native_language)).
+          • When no user message is available, return empty (silence) rather than
+            serving an English template as a filler.
 
-        Cost-control guards — LLM is skipped when ANY of these apply:
-          • self._llm_call_count >= MAX_LLM_CALLS_PER_SESSION  (hard session cap)
-          • self._message_count > EARLY_SESSION_MSG_LIMIT       (session no longer early)
-          • LLM engine returns None (unavailable / API error)
-
-        For non-Hinglish native/mixed modes the probability is raised to 90 %
-        so language-accurate output is served by the LLM, not generic templates.
-
-        On LLM failure the method seamlessly falls back to the template system.
+        English / Hinglish mode:
+          • Engagement-gated LLM (60 % probability, subject to session cap and
+            early-session limit).  Falls through to the template system on failure
+            or when guards prevent the LLM call.
 
         Parameters
         ----------
@@ -695,6 +694,51 @@ class BehaviorController:
             context.  Pass "" when unavailable.
         """
         self._message_count += 1
+
+        # ── Non-English: strict LLM-only path ────────────────────────────────
+        # When the chat language is not English we must never fall back to the
+        # English or Hinglish template pools.  Either the LLM produces output in
+        # the target language, or we return a pre-translated i18n phrase.
+        _is_non_english = (
+            self._native_language != "en"
+            and self._language_mode != "english"
+        )
+
+        if _is_non_english:
+            # Question-ignore: return nothing (still desirable for realism)
+            if random.random() < self._persona.question_ignore_rate:
+                return []
+
+            # Without a user message there is no context for the LLM to work
+            # with; return empty instead of forcing an off-topic response.
+            if not user_message or self._llm_call_count >= MAX_LLM_CALLS_PER_SESSION:
+                return []
+
+            from bot.ai.llm_engine import generate_llm_response  # lazy import
+            context = {
+                "user_message": user_message,
+                "persona": self._persona.name,
+                "tone": self._tone,
+                "history": list(self._context[-3:]),
+                "emotional_state": self._persona.emotional_mode,
+                "native_language": self._native_language,
+                "language_mode": self._language_mode,
+                "chat_language": self._native_language,
+            }
+            llm_msgs = await generate_llm_response(context)
+            if llm_msgs is None:
+                # Retry once on first LLM failure
+                llm_msgs = await generate_llm_response(context)
+            if llm_msgs:
+                self._llm_call_count += 1
+                for msg in llm_msgs:
+                    self._context.append(msg)
+                if len(self._context) > 10:
+                    self._context = self._context[-10:]
+                return llm_msgs
+            # Both attempts failed: return translated fallback phrase
+            from bot.i18n import t as _t
+            return [_t("fallback_greeting", self._native_language)]
 
         # ── Question-ignore: return nothing ──────────────────────────────────
         if random.random() < self._persona.question_ignore_rate:
@@ -720,7 +764,7 @@ class BehaviorController:
         # returning users (score in [0.0, threshold)) fall through to templates,
         # saving API costs without hurting highly engaged users.
         _is_high_engagement = (
-            self._engagement_score < 0                                 # first-session sentinel
+            self._engagement_score == -1.0                             # first-session sentinel
             or self._engagement_score >= LLM_ENGAGEMENT_THRESHOLD      # engaged returning user
         )
         use_llm = (
@@ -890,3 +934,38 @@ class BehaviorController:
         exits = hinglish_exits if self._use_hinglish else english_exits
         persona_exits = exits.get(self._persona.name, exits["friendly"])
         return random.choice(persona_exits)
+
+    async def exit_message_async(self, chat_lang: str = "en") -> str:
+        """
+        Async variant of exit_message for non-English / non-Hinglish sessions.
+
+        For sessions where chat_lang is not English (and not Hinglish, which has
+        its own template pool), the LLM is asked to produce a short, natural
+        farewell in the target language.  On failure, a pre-translated i18n
+        phrase is returned.  English and Hinglish sessions use the sync template
+        pools via the regular exit_message() path.
+        """
+        _is_non_english = chat_lang != "en" and not self._use_hinglish
+        if not _is_non_english:
+            return self.exit_message()
+
+        from bot.ai.llm_engine import generate_llm_response  # lazy import
+        context = {
+            "user_message": "ok i gtg now bye",
+            "persona": self._persona.name,
+            "tone": self._tone,
+            "history": list(self._context[-2:]),
+            "emotional_state": self._persona.emotional_mode,
+            "native_language": self._native_language,
+            "language_mode": self._language_mode,
+            "chat_language": self._native_language,
+        }
+        msgs = await generate_llm_response(context)
+        if msgs is None:
+            # Retry once
+            msgs = await generate_llm_response(context)
+        if msgs:
+            return msgs[0]
+        # Both attempts failed: return translated i18n fallback
+        from bot.i18n import t as _t
+        return _t("fallback_exit", chat_lang)

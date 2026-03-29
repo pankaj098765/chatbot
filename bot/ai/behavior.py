@@ -36,8 +36,11 @@ _VALID_TONES = frozenset({"feminine", "neutral", "masculine"})
 # ─── LLM cost-control constants ───────────────────────────────────────────────
 # Hard cap on how many times the LLM may be called within one session.
 MAX_LLM_CALLS_PER_SESSION: int = 10
-# LLM is only considered during the early stage of a session (high engagement).
+# LLM is only considered during the early stage of a session.
 EARLY_SESSION_MSG_LIMIT: int = 10
+# Minimum engagement_score (from prior session) required to use LLM.
+# Users with no history (score == 0.0) are also allowed LLM on their first session.
+LLM_ENGAGEMENT_THRESHOLD: float = 3.0
 
 # ─── Tone-aware message pools ─────────────────────────────────────────────────
 # Organised as _TONE_MESSAGES[tone][persona_name].
@@ -512,6 +515,7 @@ class BehaviorController:
         tone: str = "neutral",          # "feminine" | "neutral" | "masculine"
         native_language: str = "en",    # UPDATED: ISO 639-1 code from admin config
         language_mode: str = "english", # UPDATED: "english" | "native" | "mixed"
+        engagement_score: float = 0.0,  # Smart LLM: prior-session engagement score
     ) -> None:
         self._persona: Persona = (
             PERSONAS[persona_name] if persona_name and persona_name in PERSONAS
@@ -525,6 +529,9 @@ class BehaviorController:
         self._language_mode: str = (
             language_mode if language_mode in ("english", "native", "mixed") else "english"
         )
+        # Smart LLM: engagement score from the user's previous session.
+        # -1.0 is the sentinel for "no prior session" (first-session users).
+        self._engagement_score: float = engagement_score
         self._used_messages: set[str] = set()
         self._message_count: int = 0
         self._llm_call_count: int = 0   # hard cap on LLM calls per session
@@ -665,21 +672,20 @@ class BehaviorController:
         user_message: str = "",
     ) -> list[str]:
         """
-        Async response generator with hybrid LLM + template decision logic.
+        Async response generator with language-aware LLM + template decision logic.
 
-        Decision:
-          60 % → attempt LLM (subject to cost-control guards)
-          40 % → use template system directly
+        Non-English mode (native_language != "en" AND language_mode != "english"):
+          • ALWAYS route through the LLM — English/Hinglish template pools must
+            never be served to users expecting a different language.
+          • Retry the LLM once on failure before falling back to a translated
+            i18n phrase (t("fallback_greeting", native_language)).
+          • When no user message is available, return empty (silence) rather than
+            serving an English template as a filler.
 
-        Cost-control guards — LLM is skipped when ANY of these apply:
-          • self._llm_call_count >= MAX_LLM_CALLS_PER_SESSION  (hard session cap)
-          • self._message_count > EARLY_SESSION_MSG_LIMIT       (session no longer early)
-          • LLM engine returns None (unavailable / API error)
-
-        For non-Hinglish native/mixed modes the probability is raised to 90 %
-        so language-accurate output is served by the LLM, not generic templates.
-
-        On LLM failure the method seamlessly falls back to the template system.
+        English / Hinglish mode:
+          • Engagement-gated LLM (60 % probability, subject to session cap and
+            early-session limit).  Falls through to the template system on failure
+            or when guards prevent the LLM call.
 
         Parameters
         ----------
@@ -688,6 +694,51 @@ class BehaviorController:
             context.  Pass "" when unavailable.
         """
         self._message_count += 1
+
+        # ── Non-English: strict LLM-only path ────────────────────────────────
+        # When the chat language is not English we must never fall back to the
+        # English or Hinglish template pools.  Either the LLM produces output in
+        # the target language, or we return a pre-translated i18n phrase.
+        _is_non_english = (
+            self._native_language != "en"
+            and self._language_mode != "english"
+        )
+
+        if _is_non_english:
+            # Question-ignore: return nothing (still desirable for realism)
+            if random.random() < self._persona.question_ignore_rate:
+                return []
+
+            # Without a user message there is no context for the LLM to work
+            # with; return empty instead of forcing an off-topic response.
+            if not user_message or self._llm_call_count >= MAX_LLM_CALLS_PER_SESSION:
+                return []
+
+            from bot.ai.llm_engine import generate_llm_response  # lazy import
+            context = {
+                "user_message": user_message,
+                "persona": self._persona.name,
+                "tone": self._tone,
+                "history": list(self._context[-3:]),
+                "emotional_state": self._persona.emotional_mode,
+                "native_language": self._native_language,
+                "language_mode": self._language_mode,
+                "chat_language": self._native_language,
+            }
+            llm_msgs = await generate_llm_response(context)
+            if llm_msgs is None:
+                # Retry once on first LLM failure
+                llm_msgs = await generate_llm_response(context)
+            if llm_msgs:
+                self._llm_call_count += 1
+                for msg in llm_msgs:
+                    self._context.append(msg)
+                if len(self._context) > 10:
+                    self._context = self._context[-10:]
+                return llm_msgs
+            # Both attempts failed: return translated fallback phrase
+            from bot.i18n import t as _t
+            return [_t("fallback_greeting", self._native_language)]
 
         # ── Question-ignore: return nothing ──────────────────────────────────
         if random.random() < self._persona.question_ignore_rate:
@@ -706,18 +757,18 @@ class BehaviorController:
             return [tc]
 
         # ── Hybrid LLM / template decision ───────────────────────────────────
-        # Cost-control: LLM is only worthwhile in the early stage (first N msgs).
-        # For non-Hinglish native/mixed modes, boost LLM probability to 90% so
-        # the LLM handles language-specific output (Spanglish, Franglais, etc.)
-        # rather than falling back to generic English templates.
-        _is_non_english_mode = (
-            self._language_mode in ("native", "mixed")
-            and self._native_language != "en"
-            and not self._use_hinglish   # Hinglish has its own template pools
+        # Smart LLM: only call the LLM when the user is engaged (high prior-session
+        # engagement score) AND we are still in the early part of the session.
+        # -1.0 is the sentinel for "no prior session" (first-session users who
+        # should always get LLM for a strong first impression).  Low-engagement
+        # returning users (score in [0.0, threshold)) fall through to templates,
+        # saving API costs without hurting highly engaged users.
+        _is_high_engagement = (
+            self._engagement_score == -1.0                             # first-session sentinel
+            or self._engagement_score >= LLM_ENGAGEMENT_THRESHOLD      # engaged returning user
         )
-        _llm_prob = 0.90 if _is_non_english_mode else 0.60
         use_llm = (
-            random.random() < _llm_prob                                  # probability gate
+            _is_high_engagement                                          # smart: engagement gate
             and self._message_count <= EARLY_SESSION_MSG_LIMIT           # early session
             and self._llm_call_count < MAX_LLM_CALLS_PER_SESSION         # hard cap
             and user_message                                              # need user context
@@ -883,3 +934,38 @@ class BehaviorController:
         exits = hinglish_exits if self._use_hinglish else english_exits
         persona_exits = exits.get(self._persona.name, exits["friendly"])
         return random.choice(persona_exits)
+
+    async def exit_message_async(self, chat_lang: str = "en") -> str:
+        """
+        Async variant of exit_message for non-English / non-Hinglish sessions.
+
+        For sessions where chat_lang is not English (and not Hinglish, which has
+        its own template pool), the LLM is asked to produce a short, natural
+        farewell in the target language.  On failure, a pre-translated i18n
+        phrase is returned.  English and Hinglish sessions use the sync template
+        pools via the regular exit_message() path.
+        """
+        _is_non_english = chat_lang != "en" and not self._use_hinglish
+        if not _is_non_english:
+            return self.exit_message()
+
+        from bot.ai.llm_engine import generate_llm_response  # lazy import
+        context = {
+            "user_message": "ok i gtg now bye",
+            "persona": self._persona.name,
+            "tone": self._tone,
+            "history": list(self._context[-2:]),
+            "emotional_state": self._persona.emotional_mode,
+            "native_language": self._native_language,
+            "language_mode": self._language_mode,
+            "chat_language": self._native_language,
+        }
+        msgs = await generate_llm_response(context)
+        if msgs is None:
+            # Retry once
+            msgs = await generate_llm_response(context)
+        if msgs:
+            return msgs[0]
+        # Both attempts failed: return translated i18n fallback
+        from bot.i18n import t as _t
+        return _t("fallback_exit", chat_lang)

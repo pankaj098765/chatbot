@@ -171,6 +171,15 @@ async def start_fallback_session(bot: Bot, user_id: int) -> None:
     else:
         tone = "neutral"
 
+    # Smart LLM: read prior-session engagement score so BehaviorController
+    # can decide whether to call the LLM or fall back to templates.
+    # Use -1.0 as a sentinel for "no history yet" (first-session users) so
+    # the controller can distinguish them from low-but-recorded engagement.
+    engagement_score: float = (
+        -1.0 if is_first_session
+        else float(user.get("last_engagement_score", 0.0) if user else 0.0)
+    )
+
     # UPDATED: read global language config — NOT per-user language fields
     lang = await get_ui_lang()                                   # ui language for t()
     chat_language: str = str(config.get("native_language", "en"))
@@ -187,6 +196,7 @@ async def start_fallback_session(bot: Bot, user_id: int) -> None:
         tone=tone,                          # Tone system
         native_language=chat_language,      # UPDATED: global language_mode/native_language
         language_mode=chat_mode,            # UPDATED: global language_mode/native_language
+        engagement_score=engagement_score,  # Smart LLM: prior engagement gate
     )
     await _record_persona_used(user_id, persona_name)
 
@@ -200,10 +210,11 @@ async def start_fallback_session(bot: Bot, user_id: int) -> None:
     await redis.set_session(user_id, _FALLBACK_PARTNER_ID, session_id)
     await redis.set_session_tone(user_id, tone)
 
-    # Opening message after a short delay — UPDATED: use t() for localisation
+    # Opening message after a short delay — use chat_language so the simulated
+    # partner speaks in the correct language, while system messages use ui_language.
     await asyncio.sleep(controller.get_delay())
     try:
-        await _send_with_typing(bot, user_id, t("fallback_greeting", lang))
+        await _send_with_typing(bot, user_id, t("fallback_greeting", chat_language))
         message_count += 1
     except Exception:
         await redis.clear_session(user_id)
@@ -241,9 +252,9 @@ async def start_fallback_session(bot: Bot, user_id: int) -> None:
         except Exception:
             break
 
-    # Natural exit — UPDATED: use t() for localised disconnect message
+    # Natural exit — chat message uses chat_language; system disconnect notice uses ui_language
     try:
-        exit_msg = controller.exit_message()
+        exit_msg = await controller.exit_message_async(chat_language)
         await _send_with_typing(bot, user_id, exit_msg)
         await bot.send_message(
             user_id,

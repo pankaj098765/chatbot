@@ -46,5 +46,6 @@
   "language_filter_results": "🌐 Matching languages — tap to select:",
   "language_filter_empty": "❌ No language found for <b>{query}</b>.\n\nSend /language to see all options.",
   "language_set": "✅ Language set to <b>{language_name}</b>.\n\nChat mode: <b>{chat_mode}</b>.\n\nUse /search to find a stranger!",
-  "payment_disabled": "💳 Payments are not available on this bot."
+  "payment_disabled": "💳 Payments are not available on this bot.",
+  "fallback_exit": "gotta go, bye 😊"
 }

@@ -34,9 +34,20 @@ class Settings:
     subscription_days: int = 30
 
     # LLM integration
-    openai_api_key: str = ""      # empty → LLM disabled
-    llm_model: str = "gpt-4o-mini"
+    openai_api_key: str = ""      # legacy — still supported for OpenAI
+    llm_model: str = ""           # optional — each provider has a built-in default
     llm_enabled: bool = True      # global kill-switch
+
+    # Multi-provider LLM config
+    # llm_provider: "openai" | "gemini" | "grok" | "groq" | "mistral" |
+    #               "deepseek" | "anthropic" | "together" | "custom"
+    llm_provider: str = "openai"
+    # llm_api_key: generic key for the selected provider.
+    # Falls back to openai_api_key when provider == "openai" and this is empty.
+    llm_api_key: str = ""
+    # llm_base_url: override the REST endpoint (required for "custom",
+    # auto-populated for all built-in providers).
+    llm_base_url: str = ""
 
 
 def _get_settings() -> Settings:
@@ -50,8 +61,11 @@ def _get_settings() -> Settings:
         db_name=os.getenv("DB_NAME", "anonymous_chat"),
         debug=os.getenv("DEBUG", "false").lower() == "true",
         openai_api_key=os.getenv("OPENAI_API_KEY", ""),
-        llm_model=os.getenv("LLM_MODEL", "gpt-4o-mini"),
+        llm_model=os.getenv("LLM_MODEL", "").strip(),
         llm_enabled=os.getenv("LLM_ENABLED", "true").lower() == "true",
+        llm_provider=os.getenv("LLM_PROVIDER", "openai").strip().lower(),
+        llm_api_key=os.getenv("LLM_API_KEY", ""),
+        llm_base_url=os.getenv("LLM_BASE_URL", ""),
     )
 
 

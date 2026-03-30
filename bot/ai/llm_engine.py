@@ -18,7 +18,7 @@ Supports multiple AI providers via a provider-agnostic adapter layer:
 Configuration (environment variables):
   LLM_PROVIDER    — one of the names above (default: "openai")
   LLM_API_KEY     — API key for the selected provider
-  LLM_MODEL       — model name (provider-specific, e.g. "gemini-1.5-flash")
+  LLM_MODEL       — model name (optional; each provider has a sensible built-in default)
   LLM_BASE_URL    — only required for "custom"; auto-set for all built-in providers
   OPENAI_API_KEY  — legacy alias, used when LLM_PROVIDER=openai and LLM_API_KEY unset
 
@@ -55,11 +55,36 @@ _OPENAI_COMPAT_PROVIDERS: dict[str, str] = {
     "custom":    "",          # filled at runtime from LLM_BASE_URL
 }
 
+# Default model used when LLM_MODEL env var is not set.
+# Users only need LLM_PROVIDER + LLM_API_KEY to get started.
+_DEFAULT_MODELS: dict[str, str] = {
+    "openai":    "gpt-4o-mini",
+    "gemini":    "gemini-1.5-flash",
+    "grok":      "grok-3-mini",
+    "groq":      "llama-3.3-70b-versatile",
+    "mistral":   "mistral-small-latest",
+    "deepseek":  "deepseek-chat",
+    "together":  "mistralai/Mistral-7B-Instruct-v0.1",
+    "anthropic": "claude-3-haiku-20240307",
+    "custom":    "",   # user must specify LLM_MODEL for custom endpoints
+}
+
 
 # ─── Lazy client — only created once when first needed ───────────────────────
 
 _client = None
 _client_provider: str | None = None   # tracks which provider the cached client serves
+
+
+def _resolve_model() -> str:
+    """
+    Return the model name to use for the current provider.
+    Priority: LLM_MODEL env var (explicit) → per-provider default from _DEFAULT_MODELS.
+    """
+    if settings.llm_model:
+        return settings.llm_model
+    provider = settings.llm_provider
+    return _DEFAULT_MODELS.get(provider, "")
 
 
 def _resolve_api_key() -> str:
@@ -157,7 +182,7 @@ def _get_client():
             "LLM client initialised: provider=%r base_url=%r model=%r",
             provider,
             base_url or "(library default)",
-            settings.llm_model,
+            _resolve_model(),
         )
     except ImportError:
         logger.warning("openai package not installed — LLM responses disabled")
@@ -385,7 +410,7 @@ async def _complete_openai_compat(
 ) -> str | None:
     """Call chat.completions.create on any OpenAI-compatible client."""
     response = await client.chat.completions.create(
-        model=settings.llm_model,
+        model=_resolve_model(),
         messages=messages,
         max_tokens=60,
         temperature=0.9,
@@ -417,7 +442,7 @@ async def _complete_anthropic(
         non_system = [{"role": "user", "content": "..."}] + non_system
 
     response = await client.messages.create(
-        model=settings.llm_model,
+        model=_resolve_model(),
         system=system_prompt,
         messages=non_system,
         max_tokens=60,

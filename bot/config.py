@@ -35,7 +35,7 @@ class Settings:
 
     # LLM integration
     openai_api_key: str = ""      # legacy — still supported for OpenAI
-    llm_model: str = "gpt-4o-mini"
+    llm_model: str = ""           # optional — each provider has a built-in default
     llm_enabled: bool = True      # global kill-switch
 
     # Multi-provider LLM config
@@ -61,7 +61,7 @@ def _get_settings() -> Settings:
         db_name=os.getenv("DB_NAME", "anonymous_chat"),
         debug=os.getenv("DEBUG", "false").lower() == "true",
         openai_api_key=os.getenv("OPENAI_API_KEY", ""),
-        llm_model=os.getenv("LLM_MODEL", "gpt-4o-mini"),
+        llm_model=os.getenv("LLM_MODEL", "").strip(),
         llm_enabled=os.getenv("LLM_ENABLED", "true").lower() == "true",
         llm_provider=os.getenv("LLM_PROVIDER", "openai").strip().lower(),
         llm_api_key=os.getenv("LLM_API_KEY", ""),

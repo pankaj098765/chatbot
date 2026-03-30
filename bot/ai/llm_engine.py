@@ -1,18 +1,33 @@
 """
 bot/ai/llm_engine.py — LLM-powered multilingual response generator.
 
-Wraps an OpenAI-compatible chat completion endpoint to produce ultra-realistic,
-language-aware replies for the fallback chat engine.
+Supports multiple AI providers via a provider-agnostic adapter layer:
+
+  Provider        | How connected
+  --------------- | -----------------------------------------------
+  openai          | openai.AsyncOpenAI (default base_url)
+  gemini          | openai.AsyncOpenAI + Google OpenAI-compat endpoint
+  grok            | openai.AsyncOpenAI + xAI endpoint
+  groq            | openai.AsyncOpenAI + Groq endpoint
+  mistral         | openai.AsyncOpenAI + Mistral endpoint
+  deepseek        | openai.AsyncOpenAI + DeepSeek endpoint
+  together        | openai.AsyncOpenAI + Together AI endpoint
+  anthropic       | anthropic.AsyncAnthropic (separate SDK)
+  custom          | openai.AsyncOpenAI + LLM_BASE_URL (self-hosted / any compat API)
+
+Configuration (environment variables):
+  LLM_PROVIDER    — one of the names above (default: "openai")
+  LLM_API_KEY     — API key for the selected provider
+  LLM_MODEL       — model name (provider-specific, e.g. "gemini-1.5-flash")
+  LLM_BASE_URL    — only required for "custom"; auto-set for all built-in providers
+  OPENAI_API_KEY  — legacy alias, used when LLM_PROVIDER=openai and LLM_API_KEY unset
 
 Design principles:
-  - Async-safe: uses openai.AsyncOpenAI under the hood
+  - Async-safe; lazy client init
   - Non-blocking: always returns None on failure so callers fall back gracefully
   - Short output: prompt constrains LLM to 1–2 lines; response is hard-clamped
   - Anti-detection: applies random typo / shortening / message split after LLM
   - Filter: strips AI-sounding phrases and overly formal language
-
-# UPDATED: prompt is now fully dynamic — driven by chat_language + chat_mode
-  so the LLM responds in the user's chosen language and communication style.
 """
 from __future__ import annotations
 
@@ -25,23 +40,128 @@ from config.app_config import app_config
 
 logger = logging.getLogger(__name__)
 
+# ─── Provider routing table ───────────────────────────────────────────────────
+# Maps provider name → OpenAI-compatible base_url.
+# Providers listed here are all handled via the openai SDK with a custom base_url.
+# "anthropic" is absent because it requires its own SDK.
+_OPENAI_COMPAT_PROVIDERS: dict[str, str] = {
+    "openai":    "",          # uses library default
+    "gemini":    "https://generativelanguage.googleapis.com/v1beta/openai/",
+    "grok":      "https://api.x.ai/v1",
+    "groq":      "https://api.groq.com/openai/v1",
+    "mistral":   "https://api.mistral.ai/v1",
+    "deepseek":  "https://api.deepseek.com/v1",
+    "together":  "https://api.together.xyz/v1",
+    "custom":    "",          # filled at runtime from LLM_BASE_URL
+}
+
+
 # ─── Lazy client — only created once when first needed ───────────────────────
 
 _client = None
+_client_provider: str | None = None   # tracks which provider the cached client serves
+
+
+def _resolve_api_key() -> str:
+    """
+    Return the effective API key for the configured provider.
+    Priority: LLM_API_KEY → OPENAI_API_KEY (legacy, openai-only fallback).
+    """
+    if settings.llm_api_key:
+        return settings.llm_api_key
+    # Legacy fallback: honour OPENAI_API_KEY for openai provider
+    if settings.llm_provider == "openai" and settings.openai_api_key:
+        return settings.openai_api_key
+    return ""
 
 
 def _get_client():
-    """Return a cached AsyncOpenAI client, or None if the key is absent."""
-    global _client
+    """
+    Return a cached async LLM client for the configured provider, or None if
+    the provider is disabled / key is missing.
+
+    The client is initialised lazily on first call and cached for the lifetime
+    of the process.  Settings are read from the frozen `settings` object which
+    is loaded once at startup — provider changes require a process restart.
+
+    Returns either an openai.AsyncOpenAI instance (for all OpenAI-compat
+    providers) or an anthropic.AsyncAnthropic instance.
+    """
+    global _client, _client_provider
+
     if _client is not None:
         return _client
-    if not app_config.ai_enabled or not settings.openai_api_key or not settings.llm_enabled:
+
+    if not app_config.ai_enabled or not settings.llm_enabled:
         return None
+
+    provider = settings.llm_provider
+    api_key = _resolve_api_key()
+
+    if not api_key:
+        logger.warning(
+            "LLM disabled — no API key found for provider=%r. "
+            "Set LLM_API_KEY (or OPENAI_API_KEY for openai).",
+            provider,
+        )
+        return None
+
+    # ── Anthropic — dedicated SDK ─────────────────────────────────────────────
+    if provider == "anthropic":
+        try:
+            from anthropic import AsyncAnthropic  # type: ignore[import]
+            _client = AsyncAnthropic(api_key=api_key)
+            _client_provider = "anthropic"
+            logger.info("LLM client initialised: provider=anthropic")
+        except ImportError:
+            logger.warning(
+                "anthropic package not installed — "
+                "run `pip install anthropic` to enable Anthropic support"
+            )
+        return _client
+
+    # ── OpenAI-compatible providers ───────────────────────────────────────────
+    if provider not in _OPENAI_COMPAT_PROVIDERS:
+        logger.warning(
+            "Unknown LLM_PROVIDER=%r — falling back to openai. "
+            "Supported: %s",
+            provider,
+            ", ".join(sorted(_OPENAI_COMPAT_PROVIDERS) + ["anthropic"]),
+        )
+        provider = "openai"
+
+    # Guard: "custom" provider requires an explicit base_url
+    if provider == "custom" and not settings.llm_base_url:
+        logger.warning(
+            "LLM_PROVIDER=custom requires LLM_BASE_URL to be set — LLM disabled"
+        )
+        return None
+
     try:
         from openai import AsyncOpenAI  # type: ignore[import]
-        _client = AsyncOpenAI(api_key=settings.openai_api_key)
+
+        # Resolve base_url: explicit env override > routing table > library default
+        base_url: str | None = None
+        if settings.llm_base_url:
+            base_url = settings.llm_base_url
+        elif _OPENAI_COMPAT_PROVIDERS[provider]:
+            base_url = _OPENAI_COMPAT_PROVIDERS[provider]
+        # base_url=None → openai library uses its own default
+
+        _client = AsyncOpenAI(
+            api_key=api_key,
+            base_url=base_url,
+        )
+        _client_provider = provider
+        logger.info(
+            "LLM client initialised: provider=%r base_url=%r model=%r",
+            provider,
+            base_url or "(library default)",
+            settings.llm_model,
+        )
     except ImportError:
         logger.warning("openai package not installed — LLM responses disabled")
+
     return _client
 
 
@@ -256,12 +376,61 @@ def apply_anti_detection(text: str) -> list[str]:
     return [text]
 
 
+# ─── Provider-specific completion calls ──────────────────────────────────────
+
+
+async def _complete_openai_compat(
+    client,
+    messages: list[dict],
+) -> str | None:
+    """Call chat.completions.create on any OpenAI-compatible client."""
+    response = await client.chat.completions.create(
+        model=settings.llm_model,
+        messages=messages,
+        max_tokens=60,
+        temperature=0.9,
+        timeout=8.0,
+    )
+    return (response.choices[0].message.content or "").strip()
+
+
+async def _complete_anthropic(
+    client,
+    messages: list[dict],
+    system_prompt: str,
+) -> str | None:
+    """
+    Call Anthropic Messages API.
+    The system prompt is passed as a top-level `system` parameter;
+    the messages list must contain only user/assistant turns.
+    """
+    # Filter out the system message — Anthropic uses a separate `system` param
+    non_system = [m for m in messages if m["role"] != "system"]
+    # Anthropic requires the conversation to start with a user turn.
+    # If history contains only assistant turns (or is empty), prepend a minimal
+    # neutral user opener so the API contract is satisfied.
+    if not non_system or non_system[0]["role"] != "user":
+        logger.debug(
+            "_complete_anthropic: prepending neutral user turn to satisfy "
+            "Anthropic's first-message-must-be-user requirement"
+        )
+        non_system = [{"role": "user", "content": "..."}] + non_system
+
+    response = await client.messages.create(
+        model=settings.llm_model,
+        system=system_prompt,
+        messages=non_system,
+        max_tokens=60,
+    )
+    return (response.content[0].text or "").strip() if response.content else None
+
+
 # ─── Public API ───────────────────────────────────────────────────────────────
 
 
 async def generate_llm_response(context: dict) -> list[str] | None:
     """
-    Generate a short language-aware response using the LLM.
+    Generate a short language-aware response using the configured LLM provider.
 
     context = {
         "user_message":    str,          # last message from the user (may be "")
@@ -269,8 +438,8 @@ async def generate_llm_response(context: dict) -> list[str] | None:
         "tone":            str,          # "feminine" | "neutral" | "masculine"
         "history":         list[str],    # last ≤3 messages sent by the bot
         "emotional_state": str,          # "neutral" | "playful" | "shy"
-        "native_language": str,          # UPDATED — ISO 639-1 code, e.g. "hi"
-        "language_mode":   str,          # UPDATED — "english" | "native" | "mixed"
+        "native_language": str,          # ISO 639-1 code, e.g. "hi"
+        "language_mode":   str,          # "english" | "native" | "mixed"
     }
 
     Returns a list[str] on success (1–2 messages after anti-detection), or
@@ -284,11 +453,9 @@ async def generate_llm_response(context: dict) -> list[str] | None:
     persona = context.get("persona", "friendly")
     emotional_state = context.get("emotional_state", "neutral")
     history: list[str] = context.get("history", [])
-    # UPDATED: pick up language/mode from context using renamed keys
     native_language: str = context.get("native_language", "en")
     language_mode: str = context.get("language_mode", "english")
 
-    # UPDATED: build dynamic language instruction
     language_instruction = _build_language_instruction(native_language, language_mode)
 
     # Build system prompt
@@ -299,7 +466,7 @@ async def generate_llm_response(context: dict) -> list[str] | None:
         user_message=user_message or "...",
     )
 
-    # Optionally prepend recent bot history as assistant turns for richer context
+    # Build message list (OpenAI-style; adapted for Anthropic inside the adapter)
     messages: list[dict] = [{"role": "system", "content": system_prompt}]
     for past in history[-3:]:
         messages.append({"role": "assistant", "content": past})
@@ -307,18 +474,14 @@ async def generate_llm_response(context: dict) -> list[str] | None:
         messages.append({"role": "user", "content": user_message})
 
     try:
-        response = await client.chat.completions.create(
-            model=settings.llm_model,
-            messages=messages,
-            max_tokens=60,       # hard cap — enforces short replies
-            temperature=0.9,     # some creative variance
-            timeout=8.0,         # fail fast; fallback handles timeout
-        )
+        if _client_provider == "anthropic":
+            raw = await _complete_anthropic(client, messages, system_prompt)
+        else:
+            raw = await _complete_openai_compat(client, messages)
     except Exception as exc:
-        logger.debug("LLM request failed: %s", exc)
+        logger.debug("LLM request failed (provider=%r): %s", _client_provider, exc)
         return None
 
-    raw = (response.choices[0].message.content or "").strip()
     if not raw:
         return None
 

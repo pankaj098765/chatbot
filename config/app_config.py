@@ -33,7 +33,8 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
-load_dotenv()
+# Load .env only as a fallback — existing env vars are NEVER overwritten.
+load_dotenv(override=False)
 
 _CONFIG_DIR = Path(__file__).parent
 

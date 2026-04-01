@@ -15,7 +15,7 @@ from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
 from aiogram.fsm.storage.memory import MemoryStorage
 
-from bot.config import settings
+from bot.config import settings, log_config_summary
 from bot.database import mongodb, redis_client
 from bot.handlers import chat, payment, search, start
 from bot.services.retention_engine import run_watchdog
@@ -30,6 +30,7 @@ logger = logging.getLogger(__name__)
 
 
 async def on_startup(bot: Bot) -> None:
+    log_config_summary()
     logger.info("Connecting to MongoDB…")
     await mongodb.connect()
     logger.info("Connecting to Redis…")

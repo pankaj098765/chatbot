@@ -61,6 +61,7 @@ async def relay_message(message: Message, state: FSMContext, bot: Bot) -> None:
     if normalized in _GENDER_CHECK_PATTERNS:
         await db.update_user(user_id, {"intent": "gender_check"})
         # Slightly deprioritise this user so gender-check users cluster together
+        user = await db.get_user(user_id)
         if user:
             new_score = calc_priority_score(user) - 15
             await redis.add_to_queue(user_id, new_score)

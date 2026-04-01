@@ -6,23 +6,25 @@ services:
     restart: always
     env_file:
       - .env
-    # Environment variables defined here take priority over the .env file.
-    # Values use shell variable substitution so they can be injected at
-    # runtime without modifying the .env file (e.g. in CI/CD pipelines).
+    # Environment variables listed here (without a value) are passed through
+    # from the host shell when set, allowing runtime injection without
+    # modifying the .env file (e.g. in CI/CD pipelines).  When a variable is
+    # NOT present in the shell the entry is simply ignored and the value from
+    # the env_file above is used instead.
     environment:
-      - BOT_TOKEN=${BOT_TOKEN:-}
-      - MONGODB_URI=${MONGODB_URI:-}
-      - REDIS_URL=${REDIS_URL:-}
-      - DB_NAME=${DB_NAME:-}
-      - LLM_PROVIDER=${LLM_PROVIDER:-}
-      - LLM_API_KEY=${LLM_API_KEY:-}
-      - LLM_MODEL=${LLM_MODEL:-}
-      - LLM_BASE_URL=${LLM_BASE_URL:-}
-      - LLM_ENABLED=${LLM_ENABLED:-}
-      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
-      - AI_ENABLED=${AI_ENABLED:-}
-      - PAYMENT_ENABLED=${PAYMENT_ENABLED:-}
-      - DEBUG=${DEBUG:-}
+      - BOT_TOKEN
+      - MONGODB_URI
+      - REDIS_URL
+      - DB_NAME
+      - LLM_PROVIDER
+      - LLM_API_KEY
+      - LLM_MODEL
+      - LLM_BASE_URL
+      - LLM_ENABLED
+      - OPENAI_API_KEY
+      - AI_ENABLED
+      - PAYMENT_ENABLED
+      - DEBUG
     depends_on:
       - redis
       - mongo
@@ -33,16 +35,20 @@ services:
     command: python -m admin.main
     env_file:
       - .env
-    # Environment variables defined here take priority over the .env file.
+    # Environment variables listed here (without a value) are passed through
+    # from the host shell when set, allowing runtime injection without
+    # modifying the .env file (e.g. in CI/CD pipelines).  When a variable is
+    # NOT present in the shell the entry is simply ignored and the value from
+    # the env_file above is used instead.
     environment:
-      - ADMIN_TOKEN=${ADMIN_TOKEN:-}
-      - MONGODB_URI=${MONGODB_URI:-}
-      - REDIS_URL=${REDIS_URL:-}
-      - DB_NAME=${DB_NAME:-}
-      - BRAND_NAME=${BRAND_NAME:-}
-      - LANGUAGE_MODE=${LANGUAGE_MODE:-}
-      - NATIVE_LANGUAGE=${NATIVE_LANGUAGE:-}
-      - DEBUG=${DEBUG:-}
+      - ADMIN_TOKEN
+      - MONGODB_URI
+      - REDIS_URL
+      - DB_NAME
+      - BRAND_NAME
+      - LANGUAGE_MODE
+      - NATIVE_LANGUAGE
+      - DEBUG
     ports:
       - "8000:8000"
     depends_on:

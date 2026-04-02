@@ -67,8 +67,9 @@ async def main() -> None:
     dp.include_router(search.router)
     dp.include_router(chat.router)
 
-    # Drop pending updates on start to avoid processing stale messages
-    await bot.delete_webhook(drop_pending_updates=True)
+    # Delete any leftover webhook but preserve queued updates so messages
+    # sent while the bot was down (including /start) are not lost.
+    await bot.delete_webhook(drop_pending_updates=False)
 
     logger.info("Starting polling…")
     await dp.start_polling(bot)

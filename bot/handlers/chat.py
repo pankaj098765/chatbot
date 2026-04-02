@@ -129,3 +129,19 @@ async def cb_feedback(callback: CallbackQuery) -> None:
         t("feedback_thanks", lang),
         reply_markup=search_keyboard(lang),
     )
+
+
+# ─── Fallback for unhandled messages ─────────────────────────────────────────
+
+@router.message()
+async def fallback_unhandled(message: Message, state: FSMContext) -> None:
+    """Catch any message that no other handler matched and reply with guidance."""
+    lang = await get_ui_lang()
+    current = await state.get_state()
+    if current == UserState.SEARCHING:
+        await message.answer(t("already_searching", lang))
+    elif current == UserState.COOLDOWN:
+        await message.answer(t("abuse_blocked", lang))
+    else:
+        # IDLE or no state — guide the user to /search
+        await message.answer(t("not_in_chat", lang), reply_markup=search_keyboard(lang))

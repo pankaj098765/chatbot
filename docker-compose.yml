@@ -26,8 +26,10 @@ services:
       - PAYMENT_ENABLED
       - DEBUG
     depends_on:
-      - redis
-      - mongo
+      redis:
+        condition: service_healthy
+      mongo:
+        condition: service_healthy
 
   admin:
     build: .
@@ -52,18 +54,31 @@ services:
     ports:
       - "8000:8000"
     depends_on:
-      - redis
-      - mongo
+      redis:
+        condition: service_healthy
+      mongo:
+        condition: service_healthy
 
   redis:
     image: redis:alpine
     restart: always
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
 
   mongo:
     image: mongo
     restart: always
     volumes:
       - mongo_data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
 
 volumes:
   mongo_data:

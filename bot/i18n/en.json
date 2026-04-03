@@ -47,5 +47,10 @@
   "language_filter_empty": "❌ No language found for <b>{query}</b>.\n\nSend /language to see all options.",
   "language_set": "✅ Language set to <b>{language_name}</b>.\n\nChat mode: <b>{chat_mode}</b>.\n\nUse /search to find a stranger!",
   "payment_disabled": "💳 Payments are not available on this bot.",
-  "fallback_exit": "gotta go, bye 😊"
+  "fallback_exit": "gotta go, bye 😊",
+  "search_by_gender_button": "🔒 Search by Gender",
+  "gender_search_locked": "🔒 This feature is only for subscribers.\n\nSubscribe to use it — /pay",
+  "gender_search_prompt": "Choose who you want to match with:",
+  "match_with_male_button": "👦 Match with Males",
+  "match_with_female_button": "👧 Match with Females"
 }

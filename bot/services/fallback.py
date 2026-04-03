@@ -52,6 +52,11 @@ _FALLBACK_PARTNER_ID = -1
 # Feature 5: Minimum session duration (seconds) for a first-session user
 _FIRST_SESSION_MIN_DURATION = 180.0
 
+# Minimum silence (seconds) before AI proactively starts a topic when the
+# user hasn't sent anything.  Only one message is sent; the AI then waits
+# again rather than flooding the chat.
+_TOPIC_START_SILENCE_THRESHOLD = 90.0
+
 
 # ─── Persona selection ────────────────────────────────────────────────────────
 
@@ -213,6 +218,12 @@ async def start_fallback_session(bot: Bot, user_id: int) -> None:
     # Opening message after a short delay — use chat_language so the simulated
     # partner speaks in the correct language, while system messages use ui_language.
     await asyncio.sleep(controller.get_delay())
+
+    # Check the session is still active before the greeting (user may have
+    # pressed /stop while we were waiting for the initial delay).
+    if await redis.get_partner(user_id) != _FALLBACK_PARTNER_ID:
+        return
+
     try:
         await _send_with_typing(bot, user_id, t("fallback_greeting", chat_language))
         message_count += 1
@@ -220,8 +231,18 @@ async def start_fallback_session(bot: Bot, user_id: int) -> None:
         await redis.clear_session(user_id)
         return
 
+    # Track the last time the AI sent a message so we can gate proactive
+    # topic-starters: the AI will only start a topic unprompted if the user
+    # has been silent for longer than _TOPIC_START_SILENCE_THRESHOLD seconds.
+    last_sent_time = time.time()
+
     # Main response loop
     while True:
+        # ── Session liveness check ────────────────────────────────────────
+        # Exit immediately if the session was cleared (e.g. user pressed /stop).
+        if await redis.get_partner(user_id) != _FALLBACK_PARTNER_ID:
+            return
+
         duration = time.time() - start_time
 
         # Feature 5: First-session users get a guaranteed minimum duration
@@ -232,27 +253,52 @@ async def start_fallback_session(bot: Bot, user_id: int) -> None:
 
         await asyncio.sleep(controller.get_delay())
 
+        # ── Session liveness check after sleep ────────────────────────────
+        if await redis.get_partner(user_id) != _FALLBACK_PARTNER_ID:
+            return
+
         try:
             # Read the most recent user message for LLM context, then clear it
             # so each response cycle sees only fresh input.
             last_user_msg = await redis.get_fallback_user_message(user_id)
             if last_user_msg:
                 await redis.clear_fallback_user_message(user_id)
+            else:
+                # User has not sent anything since the last AI message.
+                # Only send a proactive topic-starter if the silence has
+                # exceeded the threshold, and send at most one message so
+                # the chat doesn't look like a monologue.
+                silence = time.time() - last_sent_time
+                if silence < _TOPIC_START_SILENCE_THRESHOLD:
+                    continue  # wait for the user to reply
 
             messages = await controller.generate_response_async(
                 user_message=last_user_msg,
             )
             # generate_response_async() may return an empty list (question-ignore)
+            if not messages:
+                continue
+
+            # When sending a proactive topic-starter (no user message), limit
+            # to one message to avoid flooding the chat with unsolicited texts.
+            if not last_user_msg:
+                messages = messages[:1]
+
             for i, msg in enumerate(messages):
                 if i > 0:
                     # Brief human-like pause between burst messages
                     await asyncio.sleep(controller.get_burst_delay())
                 await _send_with_typing(bot, user_id, msg)
                 message_count += 1
+            last_sent_time = time.time()
         except Exception:
             break
 
     # Natural exit — chat message uses chat_language; system disconnect notice uses ui_language
+    # Only send if the session is still active (user may have pressed /stop while
+    # the loop was running its last iteration).
+    if await redis.get_partner(user_id) != _FALLBACK_PARTNER_ID:
+        return
     try:
         exit_msg = await controller.exit_message_async(chat_language)
         await _send_with_typing(bot, user_id, exit_msg)

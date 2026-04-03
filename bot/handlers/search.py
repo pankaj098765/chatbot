@@ -29,7 +29,12 @@ from bot.config import settings
 from bot.database import mongodb as db
 from bot.database import redis_client as redis
 from bot.i18n import get_ui_lang, t
-from bot.keyboards.inline import next_keyboard, search_keyboard, stop_keyboard
+from bot.keyboards.inline import (
+    gender_preference_keyboard,
+    next_keyboard,
+    search_keyboard,
+    stop_keyboard,
+)
 from bot.services import anti_abuse, experience, fallback, matchmaking, session
 from bot.services.analytics import track_match_attempt
 from bot.services.queue_monitor import collect_queue_stats, get_adaptive_poll_timeout
@@ -274,3 +279,47 @@ async def cmd_stop(message: Message, state: FSMContext, bot: Bot) -> None:
 async def cb_stop(callback: CallbackQuery, state: FSMContext, bot: Bot) -> None:
     await callback.answer()
     await _do_stop(callback.message, state, bot)  # type: ignore[arg-type]
+
+
+# ─── Search by Gender ─────────────────────────────────────────────────────────
+
+
+@router.callback_query(F.data == "search_by_gender")
+async def cb_search_by_gender(callback: CallbackQuery, state: FSMContext, bot: Bot) -> None:
+    """Show gender-preference picker to premium/VIP users; locked popup for others."""
+    await callback.answer()
+    lang = await get_ui_lang()
+    current = await state.get_state()
+    if current in (UserState.SEARCHING, UserState.CONNECTED):
+        return
+
+    user = await db.get_or_create_user(callback.from_user.id)
+    if not user.get("is_premium") and not user.get("is_vip"):
+        # Non-subscriber: show locked alert popup
+        await callback.answer(t("gender_search_locked", lang), show_alert=True)
+        return
+
+    # Premium / VIP: ask which gender they want to match with
+    await callback.message.answer(  # type: ignore[union-attr]
+        t("gender_search_prompt", lang),
+        reply_markup=gender_preference_keyboard(lang),
+    )
+
+
+@router.callback_query(F.data.in_({"search_gender_male", "search_gender_female"}))
+async def cb_search_gender_pref(callback: CallbackQuery, state: FSMContext, bot: Bot) -> None:
+    """Set gender preference and start a gender-filtered search for premium/VIP users."""
+    await callback.answer()
+    lang = await get_ui_lang()
+    current = await state.get_state()
+    if current in (UserState.SEARCHING, UserState.CONNECTED):
+        return
+
+    user = await db.get_or_create_user(callback.from_user.id)
+    if not user.get("is_premium") and not user.get("is_vip"):
+        await callback.answer(t("gender_search_locked", lang), show_alert=True)
+        return
+
+    pref = "male" if callback.data == "search_gender_male" else "female"
+    await db.update_user(callback.from_user.id, {"gender_preference": pref})
+    await _do_search(callback.message, state, bot)  # type: ignore[arg-type]

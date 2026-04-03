@@ -19,6 +19,8 @@ from bot.i18n import t
 def search_keyboard(lang: str = "en") -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
     builder.button(text=t("search_button", lang), callback_data="search")
+    builder.button(text=t("search_by_gender_button", lang), callback_data="search_by_gender")
+    builder.adjust(1)
     return builder.as_markup()
 
 
@@ -62,6 +64,15 @@ def gender_keyboard(lang: str = "en") -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
     builder.button(text=t("gender_male_button", lang), callback_data="gender_male")
     builder.button(text=t("gender_female_button", lang), callback_data="gender_female")
+    builder.adjust(2)
+    return builder.as_markup()
+
+
+def gender_preference_keyboard(lang: str = "en") -> InlineKeyboardMarkup:
+    """Gender preference picker shown to premium/VIP users before a gender-filtered search."""
+    builder = InlineKeyboardBuilder()
+    builder.button(text=t("match_with_male_button", lang), callback_data="search_gender_male")
+    builder.button(text=t("match_with_female_button", lang), callback_data="search_gender_female")
     builder.adjust(2)
     return builder.as_markup()
 

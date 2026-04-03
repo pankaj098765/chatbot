@@ -47,5 +47,10 @@
   "language_filter_empty": "❌ <b>{query}</b> के लिए कोई भाषा नहीं मिली।\n\nसभी options देखने के लिए /language भेजें।",
   "language_set": "✅ भाषा <b>{language_name}</b> पर सेट हो गई।\n\nChat mode: <b>{chat_mode}</b>.\n\nनया पार्टनर खोजने के लिए /search करें!",
   "payment_disabled": "💳 इस bot पर payments उपलब्ध नहीं हैं।",
-  "fallback_exit": "जाना होगा, बाय 😊"
+  "fallback_exit": "जाना होगा, बाय 😊",
+  "search_by_gender_button": "🔒 Gender से खोजें",
+  "gender_search_locked": "🔒 यह feature सिर्फ subscribers के लिए है।\n\nSubscribe करें — /pay",
+  "gender_search_prompt": "आप किस gender से match करना चाहते हैं?",
+  "match_with_male_button": "👦 Males से मिलें",
+  "match_with_female_button": "👧 Females से मिलें"
 }

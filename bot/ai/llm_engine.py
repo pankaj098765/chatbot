@@ -504,7 +504,7 @@ async def generate_llm_response(context: dict) -> list[str] | None:
         else:
             raw = await _complete_openai_compat(client, messages)
     except Exception as exc:
-        logger.debug("LLM request failed (provider=%r): %s", _client_provider, exc)
+        logger.warning("LLM request failed (provider=%r): %s", _client_provider, exc)
         return None
 
     if not raw:

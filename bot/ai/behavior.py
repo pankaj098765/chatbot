@@ -119,17 +119,30 @@ class BehaviorController:
     async def generate_response_async(
         self,
         user_message: str = "",
+        is_proactive: bool = False,
     ) -> list[str]:
         """
         Generate a response to the user's message using the LLM.
 
+        Parameters
+        ----------
+        user_message : str
+            The last message from the user.  May be an empty string when
+            ``is_proactive`` is True.
+        is_proactive : bool
+            When True the bot is sending an unsolicited topic-starter (no
+            recent user message).  The ``user_message`` guard is skipped so
+            the LLM can produce an opener even with no user input.
+
         Returns a list of message strings (1–2 after anti-detection post-
         processing), or an empty list when no response should be sent
-        (LLM unavailable, call cap reached, or no user message to respond to).
+        (LLM unavailable or call cap reached).
         """
         self._message_count += 1
 
-        if not user_message or self._llm_call_count >= MAX_LLM_CALLS_PER_SESSION:
+        # Block calls that have neither a user message nor a proactive intent,
+        # and also enforce the per-session LLM call cap.
+        if (not user_message and not is_proactive) or self._llm_call_count >= MAX_LLM_CALLS_PER_SESSION:
             return []
 
         from bot.ai.llm_engine import generate_llm_response  # lazy import

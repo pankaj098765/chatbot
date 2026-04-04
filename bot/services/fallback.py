@@ -30,6 +30,7 @@ Multilingual: Reads user's chat_language + chat_mode and passes them to
 from __future__ import annotations
 
 import asyncio
+import logging
 import random
 import time
 
@@ -44,6 +45,8 @@ from bot.i18n import get_ui_lang, t
 from bot.services import admin_control
 from bot.utils.helpers import generate_session_id
 
+logger = logging.getLogger(__name__)
+
 # Fake partner user_id used as the Redis key placeholder for fallback sessions
 _FALLBACK_PARTNER_ID = -1
 
@@ -54,6 +57,11 @@ _FIRST_SESSION_MIN_DURATION = 180.0
 # user hasn't sent anything.  Only one message is sent; the AI then waits
 # again rather than flooding the chat.
 _TOPIC_START_SILENCE_THRESHOLD = 90.0
+
+# Cue text injected into the LLM prompt when the bot needs to send a
+# proactive topic-starter (no recent user message).  This is never shown to
+# the user; it only guides the LLM to produce an opener.
+_PROACTIVE_MESSAGE_CUE = "(start a new topic or say something interesting)"
 
 
 # ─── Persona selection ────────────────────────────────────────────────────────
@@ -213,6 +221,11 @@ async def start_fallback_session(bot: Bot, user_id: int) -> None:
     await redis.set_session(user_id, _FALLBACK_PARTNER_ID, session_id)
     await redis.set_session_tone(user_id, tone)
 
+    logger.info(
+        "Fallback session started for user_id=%d persona=%s tone=%s",
+        user_id, persona_name, tone,
+    )
+
     # Wait 35–60 seconds (random) before sending the opening greeting so the
     # chat feels natural and not like an instant bot response.
     await asyncio.sleep(random.uniform(35.0, 60.0))
@@ -220,6 +233,7 @@ async def start_fallback_session(bot: Bot, user_id: int) -> None:
     # Check the session is still active before the greeting (user may have
     # pressed /stop while we were waiting).
     if await redis.get_partner(user_id) != _FALLBACK_PARTNER_ID:
+        logger.info("Fallback session cancelled before greeting for user_id=%d", user_id)
         return
 
     try:
@@ -229,7 +243,12 @@ async def start_fallback_session(bot: Bot, user_id: int) -> None:
         ])
         await _send_with_typing(bot, user_id, greeting)
         message_count += 1
-    except Exception:
+        logger.debug("Fallback greeting sent to user_id=%d", user_id)
+    except Exception as exc:
+        logger.warning(
+            "Fallback session: failed to send greeting to user_id=%d: %s",
+            user_id, exc,
+        )
         await redis.clear_session(user_id)
         return
 
@@ -274,8 +293,13 @@ async def start_fallback_session(bot: Bot, user_id: int) -> None:
                 if silence < _TOPIC_START_SILENCE_THRESHOLD:
                     continue  # wait for the user to reply
 
+            # For proactive messages (no user reply yet) pass a natural cue so
+            # the LLM generates an opener rather than receiving an empty prompt.
+            effective_msg = last_user_msg or _PROACTIVE_MESSAGE_CUE
+
             messages = await controller.generate_response_async(
-                user_message=last_user_msg,
+                user_message=effective_msg,
+                is_proactive=not last_user_msg,
             )
             # generate_response_async() may return an empty list (question-ignore)
             if not messages:
@@ -293,12 +317,17 @@ async def start_fallback_session(bot: Bot, user_id: int) -> None:
                 await _send_with_typing(bot, user_id, msg)
                 message_count += 1
             last_sent_time = time.time()
-        except Exception:
+        except Exception as exc:
+            logger.warning(
+                "Fallback session: error in response loop for user_id=%d: %s",
+                user_id, exc,
+            )
             break
 
     # Natural exit — LLM generates farewell; system disconnect notice uses ui_language.
     # Only send if the session is still active (user may have pressed /stop while
     # the loop was running its last iteration).
+    logger.info("Fallback session ending for user_id=%d after %d messages", user_id, message_count)
     if await redis.get_partner(user_id) != _FALLBACK_PARTNER_ID:
         return
     try:
@@ -309,8 +338,8 @@ async def start_fallback_session(bot: Bot, user_id: int) -> None:
             user_id,
             t("partner_disconnected", lang),
         )
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.warning("Fallback session: failed to send exit message to user_id=%d: %s", user_id, exc)
 
     await redis.clear_session(user_id)
 

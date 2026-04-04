@@ -16,9 +16,9 @@ Supports multiple AI providers via a provider-agnostic adapter layer:
   custom          | openai.AsyncOpenAI + LLM_BASE_URL (self-hosted / any compat API)
 
 Configuration (environment variables):
-  LLM_PROVIDER    — one of the names above (default: "openai")
+  LLM_PROVIDER    — one of the names above (default: auto-detected from key format)
   LLM_API_KEY     — API key for the selected provider
-  LLM_MODEL       — model name (optional; each provider has a sensible built-in default)
+  LLM_MODEL       — model name (optional; auto-discovered from provider's /models API)
   LLM_BASE_URL    — only required for "custom"; auto-set for all built-in providers
   OPENAI_API_KEY  — legacy alias, used when LLM_PROVIDER=openai and LLM_API_KEY unset
 
@@ -28,6 +28,7 @@ Design principles:
   - Short output: prompt constrains LLM to 1–2 lines; response is hard-clamped
   - Anti-detection: applies random typo / shortening / message split after LLM
   - Filter: strips AI-sounding phrases and overly formal language
+  - Zero hardcoding: model is discovered at runtime via the provider's models API
 """
 from __future__ import annotations
 
@@ -55,36 +56,150 @@ _OPENAI_COMPAT_PROVIDERS: dict[str, str] = {
     "custom":    "",          # filled at runtime from LLM_BASE_URL
 }
 
-# Default model used when LLM_MODEL env var is not set.
-# Users only need LLM_PROVIDER + LLM_API_KEY to get started.
-_DEFAULT_MODELS: dict[str, str] = {
-    "openai":    "gpt-4o-mini",
-    "gemini":    "gemini-1.5-flash",
-    "grok":      "grok-3-mini",
-    "groq":      "llama-3.3-70b-versatile",
-    "mistral":   "mistral-small-latest",
-    "deepseek":  "deepseek-chat",
-    "together":  "mistralai/Mistral-7B-Instruct-v0.1",
-    "anthropic": "claude-3-haiku-20240307",
-    "custom":    "",   # user must specify LLM_MODEL for custom endpoints
-}
+# ─── Model discovery ─────────────────────────────────────────────────────────
+# Model is discovered at runtime by querying the provider's /models endpoint.
+# No model names are hardcoded — the bot adapts to whatever the provider offers.
+
+# Substrings that indicate a model is NOT suitable for chat completion.
+_NON_CHAT_KEYWORDS: tuple[str, ...] = (
+    "embed", "embedding",
+    "whisper", "transcri",
+    "tts", "speech",
+    "dall-e", "image",
+    "moderation",
+    "text-search", "text-similarity",
+    "babbage", "davinci-002",   # legacy completion-only
+    "instruct",                 # instruction-tuned completions (not chat)
+)
+
+# Substrings that suggest a well-rounded, fast chat model — scored positively.
+_PREFER_KEYWORDS: tuple[str, ...] = (
+    "flash",     # Gemini Flash family — fast & capable
+    "turbo",     # GPT Turbo family
+    "mini",      # GPT / Gemini mini — lightweight
+    "small",     # Mistral Small
+    "lite",      # lightweight variants
+    "haiku",     # Claude Haiku — fast
+    "sonnet",    # Claude Sonnet — balanced
+    "latest",    # provider-maintained "latest" alias
+    "fast",      # any "fast" variant
+    "nano",      # any "nano" variant
+)
+
+# Cached model name resolved once per process lifetime.
+_active_model: str | None = None
+
+
+def _score_model(model_id: str) -> int:
+    """
+    Return a preference score for *model_id*.
+
+    Negative score  → model is unsuitable for chat (will be excluded).
+    Zero or above   → suitable; higher is better.
+    """
+    low = model_id.lower()
+    for kw in _NON_CHAT_KEYWORDS:
+        if kw in low:
+            return -1
+    score = sum(1 for kw in _PREFER_KEYWORDS if kw in low)
+    return score
+
+
+def _pick_model_from_list(model_ids: list[str]) -> str | None:
+    """
+    Choose the most suitable chat model from *model_ids*.
+
+    Filters out non-chat models, scores the rest, and returns the highest-
+    scoring one.  Returns the first available model when nothing scores
+    positively, or None when *model_ids* is empty.
+    """
+    if not model_ids:
+        return None
+
+    scored = [(mid, _score_model(mid)) for mid in model_ids]
+    chat_models = [(mid, s) for mid, s in scored if s >= 0]
+
+    if not chat_models:
+        # All models were filtered out — fall back to the raw first entry.
+        return model_ids[0]
+
+    chat_models.sort(key=lambda x: x[1], reverse=True)
+    return chat_models[0][0]
+
+
+async def _discover_model(client, provider: str) -> str | None:
+    """
+    Query the provider's models endpoint and return the best-fit model name.
+
+    Works with both the openai-compat client (``client.models.list()``) and
+    the Anthropic SDK (same interface).  Returns None if the call fails or
+    no suitable model is found.
+    """
+    try:
+        resp = await client.models.list()
+        # Both openai and anthropic SDKs expose .data as a list of model objects
+        model_ids: list[str] = [m.id for m in resp.data]
+        if not model_ids:
+            logger.warning(
+                "Model discovery: provider=%r returned an empty model list",
+                provider,
+            )
+            return None
+        chosen = _pick_model_from_list(model_ids)
+        logger.info(
+            "Model discovery: provider=%r found %d model(s), selected %r",
+            provider,
+            len(model_ids),
+            chosen,
+        )
+        return chosen
+    except Exception as exc:
+        logger.warning(
+            "Model discovery failed for provider=%r: %s — "
+            "set LLM_MODEL explicitly to skip discovery",
+            provider,
+            exc,
+        )
+        return None
+
+
+async def _ensure_model_discovered(client, provider: str) -> None:
+    """
+    Populate *_active_model* the first time it is needed.
+
+    Priority:
+      1. ``LLM_MODEL`` env var  — user's explicit choice, never overridden.
+      2. Provider's ``/models`` API  — auto-discovered at first request.
+      3. Empty string  — LLM request will fail gracefully with a warning.
+    """
+    global _active_model
+    if _active_model is not None:
+        return  # already resolved
+
+    if settings.llm_model:
+        _active_model = settings.llm_model
+        logger.info("Using explicitly configured model: %r", _active_model)
+        return
+
+    discovered = await _discover_model(client, provider)
+    _active_model = discovered or ""
+    if not _active_model:
+        logger.warning(
+            "Could not determine a model for provider=%r. "
+            "Set LLM_MODEL in your environment to specify one.",
+            provider,
+        )
+
+
+def _resolve_model() -> str:
+    """Return the cached active model name (empty string if not yet resolved)."""
+    return _active_model or ""
 
 
 # ─── Lazy client — only created once when first needed ───────────────────────
 
 _client = None
 _client_provider: str | None = None   # tracks which provider the cached client serves
-
-
-def _resolve_model() -> str:
-    """
-    Return the model name to use for the current provider.
-    Priority: LLM_MODEL env var (explicit) → per-provider default from _DEFAULT_MODELS.
-    """
-    if settings.llm_model:
-        return settings.llm_model
-    provider = settings.llm_provider
-    return _DEFAULT_MODELS.get(provider, "")
 
 
 def _resolve_api_key() -> str:
@@ -179,10 +294,9 @@ def _get_client():
         )
         _client_provider = provider
         logger.info(
-            "LLM client initialised: provider=%r base_url=%r model=%r",
+            "LLM client initialised: provider=%r base_url=%r",
             provider,
             base_url or "(library default)",
-            _resolve_model(),
         )
     except ImportError:
         logger.warning("openai package not installed — LLM responses disabled")
@@ -472,6 +586,15 @@ async def generate_llm_response(context: dict) -> list[str] | None:
     """
     client = _get_client()
     if client is None:
+        return None
+
+    # Discover / confirm model on the very first request (async, cached).
+    await _ensure_model_discovered(client, _client_provider or settings.llm_provider)
+    if not _resolve_model():
+        logger.warning(
+            "No model available for provider=%r — LLM response skipped",
+            _client_provider,
+        )
         return None
 
     user_message = context.get("user_message", "").strip()

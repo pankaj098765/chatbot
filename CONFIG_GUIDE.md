@@ -155,9 +155,9 @@ AI_ENABLED=true
 LLM_API_KEY=your-api-key-here
 ```
 
-The provider and model are **auto-detected** from the key format. See `LLM_API_KEY` below.
+The provider and model are **auto-detected**: the provider is inferred from the key format, and the model is then discovered by querying the provider's own models API. See `LLM_API_KEY` below.
 
-> **Cost note:** Each provider's default model is chosen for the best cost-to-quality balance. The bot sends very short prompts (1–2 sentence replies), so costs are typically low.
+> **Cost note:** The auto-selected model is chosen from the provider's available models using a preference for fast, balanced chat models. The bot sends very short prompts (1–2 sentence replies), so costs are typically low.
 
 ---
 
@@ -169,7 +169,7 @@ The provider and model are **auto-detected** from the key format. See `LLM_API_K
 | **Default** | *(empty — AI disabled if no key is set)* |
 | **Example** | `AIzaSy…` |
 
-**This is the only setting you need to enable AI.** Paste any API key here and the bot automatically detects which provider and model to use based on the key format.
+**This is the only setting you need to enable AI.** Paste any API key here and the bot automatically detects the provider from the key format, then queries that provider's models API to select the best available chat model.
 
 ```
 LLM_API_KEY=your-api-key-here
@@ -177,18 +177,18 @@ LLM_API_KEY=your-api-key-here
 
 **Auto-detection table:**
 
-| Key prefix | Provider | Default model used |
+| Key prefix | Provider | Model selection |
 |------------|----------|--------------------|
-| `sk-ant-…` | Anthropic (Claude) | `claude-3-haiku-20240307` |
-| `gsk_…` | Groq (Llama / Mixtral) | `llama-3.3-70b-versatile` |
-| `AIza…` | Gemini (Google) | `gemini-1.5-flash` |
-| `xai-…` | Grok (xAI) | `grok-3-mini` |
-| `sk-…` | OpenAI (GPT) | `gpt-4o-mini` |
-| *(other)* | OpenAI (default fallback) | `gpt-4o-mini` |
+| `sk-ant-…` | Anthropic (Claude) | Auto-discovered |
+| `gsk_…` | Groq (Llama / Mixtral) | Auto-discovered |
+| `AIza…` | Gemini (Google) | Auto-discovered |
+| `xai-…` | Grok (xAI) | Auto-discovered |
+| `sk-…` | OpenAI (GPT) | Auto-discovered |
+| *(other)* | OpenAI (default fallback) | Auto-discovered |
 
-The auto-detected provider is printed in the startup logs so you can verify it:
+The selected model is printed in the startup logs so you can verify it:
 ```
-[INFO] bot.config: LLM provider auto-detected from API key format: 'gemini'
+[INFO] bot.ai.llm_engine: Model discovery: provider='gemini' found 12 model(s), selected 'gemini-2.0-flash'
 ```
 
 > **Note for DeepSeek users:** DeepSeek API keys also start with `sk-`, which is shared with OpenAI. If you have a DeepSeek key, set `LLM_PROVIDER=deepseek` explicitly alongside `LLM_API_KEY` to avoid it being treated as an OpenAI key.
@@ -216,24 +216,15 @@ LLM_API_KEY=your-mistral-key
 | | |
 |---|---|
 | **Type** | string |
-| **Default** | *(best default for the detected provider)* |
+| **Default** | *(auto-discovered from the provider's models API at first request)* |
 
-Override the model chosen automatically. Only set this if you need a specific model:
+Override the model selected automatically. Only set this if you need a specific model and want to skip auto-discovery:
 
 ```
-LLM_MODEL=gemini-1.5-pro
+LLM_MODEL=gemini-2.0-flash
 ```
 
-| Provider | Default model | Other options |
-|----------|---------------|---------------|
-| openai | `gpt-4o-mini` | `gpt-4o`, `gpt-3.5-turbo` |
-| gemini | `gemini-1.5-flash` | `gemini-1.5-pro` |
-| anthropic | `claude-3-haiku-20240307` | `claude-3-5-sonnet-20241022` |
-| groq | `llama-3.3-70b-versatile` | `mixtral-8x7b-32768` |
-| grok | `grok-3-mini` | `grok-2` |
-| mistral | `mistral-small-latest` | `mistral-large-latest` |
-| deepseek | `deepseek-chat` | — |
-| together | `mistralai/Mistral-7B-Instruct-v0.1` | — |
+When `LLM_MODEL` is not set, the bot queries the provider's `/models` endpoint on the first message and picks the best available chat model automatically. The selected model is logged at startup so you can see which one was chosen.
 
 ---
 

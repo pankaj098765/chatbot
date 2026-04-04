@@ -21,7 +21,16 @@ services:
       - LLM_MODEL
       - LLM_BASE_URL
       - LLM_ENABLED
+      # Provider-specific API key aliases — set whichever matches your provider.
+      # The bot auto-detects the provider from whichever key is present.
       - OPENAI_API_KEY
+      - GEMINI_API_KEY
+      - ANTHROPIC_API_KEY
+      - GROQ_API_KEY
+      - GROK_API_KEY
+      - MISTRAL_API_KEY
+      - DEEPSEEK_API_KEY
+      - TOGETHER_API_KEY
       - AI_ENABLED
       - PAYMENT_ENABLED
       - DEBUG

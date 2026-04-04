@@ -7,6 +7,15 @@ Priority (highest to lowest):
   3. Default values         — hard-coded sensible defaults per field
 
 The .env file is *optional*: if it is absent no error is raised.
+
+LLM provider / key resolution order:
+  1. LLM_PROVIDER  + LLM_API_KEY          — fully explicit
+  2. LLM_PROVIDER  + <PROVIDER>_API_KEY   — provider set, key via provider-specific var
+     e.g.  LLM_PROVIDER=gemini  + GEMINI_API_KEY=…
+  3. Auto-detect from provider-specific key with no LLM_PROVIDER set:
+     GEMINI_API_KEY / ANTHROPIC_API_KEY / GROQ_API_KEY / GROK_API_KEY /
+     MISTRAL_API_KEY / DEEPSEEK_API_KEY / TOGETHER_API_KEY
+  4. LLM_PROVIDER=openai  + OPENAI_API_KEY (legacy alias)
 """
 from __future__ import annotations
 
@@ -19,6 +28,20 @@ from dotenv import load_dotenv
 # Load .env only as a fallback — existing env vars are NEVER overwritten.
 # dotenv returns False silently when the file is missing, so this is safe.
 load_dotenv(override=False)
+
+# Ordered mapping: provider-specific env-var name → provider identifier.
+# Used both for explicit-provider key lookup (step 2) and auto-detection (step 3).
+# Order matters for auto-detection priority.
+_PROVIDER_KEY_ENVS: dict[str, str] = {
+    "GEMINI_API_KEY":    "gemini",
+    "ANTHROPIC_API_KEY": "anthropic",
+    "GROQ_API_KEY":      "groq",
+    "GROK_API_KEY":      "grok",
+    "MISTRAL_API_KEY":   "mistral",
+    "DEEPSEEK_API_KEY":  "deepseek",
+    "TOGETHER_API_KEY":  "together",
+    # OPENAI_API_KEY is handled separately as a legacy alias below
+}
 
 logger = logging.getLogger(__name__)
 
@@ -75,8 +98,48 @@ class Settings:
     llm_base_url: str = ""
 
 
+def _resolve_llm_provider_and_key() -> tuple[str, str]:
+    """
+    Determine the effective LLM provider and API key using a multi-step
+    fallback strategy so that setting only e.g. GEMINI_API_KEY is enough.
+
+    Returns (provider, api_key).
+    """
+    explicit_provider = os.getenv("LLM_PROVIDER", "").strip().lower()
+    llm_api_key = os.getenv("LLM_API_KEY", "").strip()
+
+    # Step 1 — fully explicit: both LLM_PROVIDER and LLM_API_KEY are set.
+    if llm_api_key:
+        return explicit_provider or "openai", llm_api_key
+
+    # Step 2 — LLM_PROVIDER set but LLM_API_KEY missing: check the matching
+    # provider-specific env var (e.g. GEMINI_API_KEY when LLM_PROVIDER=gemini).
+    if explicit_provider:
+        specific_env = f"{explicit_provider.upper()}_API_KEY"
+        key = os.getenv(specific_env, "").strip()
+        if key:
+            return explicit_provider, key
+
+    # Step 3 — no LLM_PROVIDER set: auto-detect from available provider keys.
+    if not explicit_provider:
+        for env_var, provider_name in _PROVIDER_KEY_ENVS.items():
+            key = os.getenv(env_var, "").strip()
+            if key:
+                return provider_name, key
+
+    # Step 4 — legacy: OPENAI_API_KEY when provider is openai (or still unset).
+    openai_key = os.getenv("OPENAI_API_KEY", "").strip()
+    if openai_key and (not explicit_provider or explicit_provider == "openai"):
+        return "openai", openai_key
+
+    # No key found; return provider (or default) with empty key so the warning
+    # in llm_engine can report the correct provider name.
+    return explicit_provider or "openai", ""
+
+
 def _get_settings() -> Settings:
     token = get_env("BOT_TOKEN", required=True)
+    llm_provider, llm_api_key = _resolve_llm_provider_and_key()
     return Settings(
         bot_token=token,
         mongodb_uri=get_env("MONGODB_URI", "mongodb://localhost:27017"),
@@ -86,8 +149,8 @@ def _get_settings() -> Settings:
         openai_api_key=get_env("OPENAI_API_KEY", ""),
         llm_model=get_env("LLM_MODEL", "").strip(),
         llm_enabled=get_env("LLM_ENABLED", "true").lower() == "true",
-        llm_provider=get_env("LLM_PROVIDER", "openai").strip().lower(),
-        llm_api_key=get_env("LLM_API_KEY", ""),
+        llm_provider=llm_provider,
+        llm_api_key=llm_api_key,
         llm_base_url=get_env("LLM_BASE_URL", ""),
     )
 

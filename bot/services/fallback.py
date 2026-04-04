@@ -213,9 +213,9 @@ async def start_fallback_session(bot: Bot, user_id: int) -> None:
     await redis.set_session(user_id, _FALLBACK_PARTNER_ID, session_id)
     await redis.set_session_tone(user_id, tone)
 
-    # Wait 30–40 seconds before sending the opening greeting so the chat feels
-    # natural and not like an instant bot response.
-    await asyncio.sleep(random.uniform(30.0, 40.0))
+    # Wait 35–60 seconds (random) before sending the opening greeting so the
+    # chat feels natural and not like an instant bot response.
+    await asyncio.sleep(random.uniform(35.0, 60.0))
 
     # Check the session is still active before the greeting (user may have
     # pressed /stop while we were waiting).
@@ -223,7 +223,10 @@ async def start_fallback_session(bot: Bot, user_id: int) -> None:
         return
 
     try:
-        greeting = random.choice(["hi", "hello", "hey", "👋"])
+        greeting = random.choice([
+            "hi", "hello", "hey", "👋",
+            "hiii", "helloo", "hi👋", "Hi", "Hello", "Hey",
+        ])
         await _send_with_typing(bot, user_id, greeting)
         message_count += 1
     except Exception:

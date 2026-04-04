@@ -8,14 +8,17 @@ Priority (highest to lowest):
 
 The .env file is *optional*: if it is absent no error is raised.
 
-LLM provider / key resolution order:
+LLM provider / key resolution order (just set LLM_API_KEY — nothing else needed):
   1. LLM_PROVIDER  + LLM_API_KEY          — fully explicit
-  2. LLM_PROVIDER  + <PROVIDER>_API_KEY   — provider set, key via provider-specific var
+  2. LLM_API_KEY alone                    — provider auto-detected from key format:
+       sk-ant-… → anthropic  |  gsk_… → groq     |  AIza… → gemini
+       xai-…   → grok        |  sk-…  → openai   (default for unrecognised formats)
+  3. LLM_PROVIDER  + <PROVIDER>_API_KEY   — provider set, key via provider-specific var
      e.g.  LLM_PROVIDER=gemini  + GEMINI_API_KEY=…
-  3. Auto-detect from provider-specific key with no LLM_PROVIDER set:
+  4. Auto-detect from provider-specific key with no LLM_PROVIDER set:
      GEMINI_API_KEY / ANTHROPIC_API_KEY / GROQ_API_KEY / GROK_API_KEY /
      MISTRAL_API_KEY / DEEPSEEK_API_KEY / TOGETHER_API_KEY
-  4. LLM_PROVIDER=openai  + OPENAI_API_KEY (legacy alias)
+  5. LLM_PROVIDER=openai  + OPENAI_API_KEY (legacy alias)
 """
 from __future__ import annotations
 
@@ -98,10 +101,49 @@ class Settings:
     llm_base_url: str = ""
 
 
+# ─── Key-format fingerprints ─────────────────────────────────────────────────
+# Maps a key prefix to the provider name.  Checked in order; first match wins.
+# Only prefixes that are *unambiguously* tied to one provider are listed.
+_KEY_FINGERPRINTS: list[tuple[str, str]] = [
+    ("sk-ant-",  "anthropic"),   # Anthropic — always starts with sk-ant-
+    ("gsk_",     "groq"),        # Groq
+    ("AIza",     "gemini"),      # Google / Gemini
+    ("xai-",     "grok"),        # xAI / Grok
+    ("sk-or-",   "openrouter"),  # OpenRouter
+    ("sk-",      "openai"),      # OpenAI (also used by DeepSeek, but much more common)
+]
+
+
+def _detect_provider_from_key(key: str) -> str | None:
+    """
+    Infer the AI provider from the format / prefix of the API key.
+
+    Returns the provider name string if detected, or None when the key
+    format is not recognised (caller should default to "openai" or warn).
+    """
+    for prefix, provider in _KEY_FINGERPRINTS:
+        if key.startswith(prefix):
+            return provider
+    return None
+
+
 def _resolve_llm_provider_and_key() -> tuple[str, str]:
     """
     Determine the effective LLM provider and API key using a multi-step
-    fallback strategy so that setting only e.g. GEMINI_API_KEY is enough.
+    fallback strategy.  Setting only ``LLM_API_KEY`` is sufficient — the
+    provider is auto-detected from the key format when ``LLM_PROVIDER`` is
+    not explicitly configured.
+
+    Resolution order
+    ----------------
+    1. LLM_PROVIDER + LLM_API_KEY — fully explicit, nothing inferred.
+    2. LLM_API_KEY set, LLM_PROVIDER empty — **fingerprint the key** to
+       detect the provider; fall back to "openai" for unrecognised formats.
+    3. LLM_PROVIDER set, LLM_API_KEY empty — check the matching provider-
+       specific alias env var (e.g. GEMINI_API_KEY when LLM_PROVIDER=gemini).
+    4. Neither set — scan all provider-specific alias env vars in priority
+       order (GEMINI_API_KEY, ANTHROPIC_API_KEY, …) for auto-detection.
+    5. Legacy: OPENAI_API_KEY when provider is openai (or still unset).
 
     Returns (provider, api_key).
     """
@@ -109,10 +151,26 @@ def _resolve_llm_provider_and_key() -> tuple[str, str]:
     llm_api_key = os.getenv("LLM_API_KEY", "").strip()
 
     # Step 1 — fully explicit: both LLM_PROVIDER and LLM_API_KEY are set.
-    if llm_api_key:
-        return explicit_provider or "openai", llm_api_key
+    if llm_api_key and explicit_provider:
+        return explicit_provider, llm_api_key
 
-    # Step 2 — LLM_PROVIDER set but LLM_API_KEY missing: check the matching
+    # Step 2 — LLM_API_KEY set but no explicit provider: fingerprint the key.
+    if llm_api_key:
+        detected = _detect_provider_from_key(llm_api_key)
+        if detected:
+            logger.info(
+                "LLM provider auto-detected from API key format: %r "
+                "(set LLM_PROVIDER explicitly to override)",
+                detected,
+            )
+        else:
+            logger.info(
+                "LLM_API_KEY format not recognised — defaulting to provider='openai'. "
+                "Set LLM_PROVIDER explicitly if you are using a different provider."
+            )
+        return detected or "openai", llm_api_key
+
+    # Step 3 — LLM_PROVIDER set but LLM_API_KEY missing: check the matching
     # provider-specific env var (e.g. GEMINI_API_KEY when LLM_PROVIDER=gemini).
     if explicit_provider:
         specific_env = f"{explicit_provider.upper()}_API_KEY"
@@ -120,14 +178,14 @@ def _resolve_llm_provider_and_key() -> tuple[str, str]:
         if key:
             return explicit_provider, key
 
-    # Step 3 — no LLM_PROVIDER set: auto-detect from available provider keys.
+    # Step 4 — no LLM_PROVIDER set: auto-detect from available provider keys.
     if not explicit_provider:
         for env_var, provider_name in _PROVIDER_KEY_ENVS.items():
             key = os.getenv(env_var, "").strip()
             if key:
                 return provider_name, key
 
-    # Step 4 — legacy: OPENAI_API_KEY when provider is openai (or still unset).
+    # Step 5 — legacy: OPENAI_API_KEY when provider is openai (or still unset).
     openai_key = os.getenv("OPENAI_API_KEY", "").strip()
     if openai_key and (not explicit_provider or explicit_provider == "openai"):
         return "openai", openai_key
@@ -166,9 +224,8 @@ def log_config_summary() -> None:
         f"MONGODB_URI: {'SET' if settings.mongodb_uri else 'NOT SET'}",
         f"REDIS_URL: {'SET' if settings.redis_url else 'NOT SET'}",
         f"DB_NAME: {'SET' if settings.db_name else 'NOT SET'}",
-        f"LLM_PROVIDER: {'SET' if settings.llm_provider else 'NOT SET'}",
-        f"LLM_API_KEY: {'SET' if settings.llm_api_key else 'NOT SET'}",
-        f"OPENAI_API_KEY: {'SET' if settings.openai_api_key else 'NOT SET'}",
+        f"LLM_PROVIDER: {settings.llm_provider or 'NOT SET'} "
+        f"({'key SET' if settings.llm_api_key else 'key NOT SET'})",
         f"LLM_ENABLED: {'true' if settings.llm_enabled else 'false'}",
         f"DEBUG: {'true' if settings.debug else 'false'}",
     ]

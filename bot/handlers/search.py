@@ -52,8 +52,10 @@ async def _do_search(
     state: FSMContext,
     bot: Bot,
     warm_start: bool = False,
+    user_id: int | None = None,
 ) -> None:
-    user_id = message.from_user.id  # type: ignore[union-attr]
+    if user_id is None:
+        user_id = message.from_user.id  # type: ignore[union-attr]
 
     # UPDATED: global UI language — same for every user
     lang = await get_ui_lang()
@@ -190,14 +192,15 @@ async def cb_search(callback: CallbackQuery, state: FSMContext, bot: Bot) -> Non
     current = await state.get_state()
     if current in (UserState.SEARCHING, UserState.CONNECTED):
         return
-    await _do_search(callback.message, state, bot)  # type: ignore[arg-type]
+    await _do_search(callback.message, state, bot, user_id=callback.from_user.id)  # type: ignore[arg-type]
 
 
 # ─── /next ────────────────────────────────────────────────────────────────────
 
 
-async def _do_next(message: Message, state: FSMContext, bot: Bot) -> None:
-    user_id = message.from_user.id  # type: ignore[union-attr]
+async def _do_next(message: Message, state: FSMContext, bot: Bot, user_id: int | None = None) -> None:
+    if user_id is None:
+        user_id = message.from_user.id  # type: ignore[union-attr]
     partner_id = await redis.get_partner(user_id)
     lang = await get_ui_lang()
 
@@ -216,7 +219,7 @@ async def _do_next(message: Message, state: FSMContext, bot: Bot) -> None:
             pass
 
     # Fix #10: Re-search with warm-start boost
-    await _do_search(message, state, bot, warm_start=True)
+    await _do_search(message, state, bot, warm_start=True, user_id=user_id)
 
 
 @router.message(Command("next"))
@@ -232,14 +235,15 @@ async def cmd_next(message: Message, state: FSMContext, bot: Bot) -> None:
 @router.callback_query(F.data == "next")
 async def cb_next(callback: CallbackQuery, state: FSMContext, bot: Bot) -> None:
     await callback.answer()
-    await _do_next(callback.message, state, bot)  # type: ignore[arg-type]
+    await _do_next(callback.message, state, bot, user_id=callback.from_user.id)  # type: ignore[arg-type]
 
 
 # ─── /stop ────────────────────────────────────────────────────────────────────
 
 
-async def _do_stop(message: Message, state: FSMContext, bot: Bot) -> None:
-    user_id = message.from_user.id  # type: ignore[union-attr]
+async def _do_stop(message: Message, state: FSMContext, bot: Bot, user_id: int | None = None) -> None:
+    if user_id is None:
+        user_id = message.from_user.id  # type: ignore[union-attr]
     partner_id = await redis.get_partner(user_id)
     lang = await get_ui_lang()
 
@@ -278,7 +282,7 @@ async def cmd_stop(message: Message, state: FSMContext, bot: Bot) -> None:
 @router.callback_query(F.data == "stop")
 async def cb_stop(callback: CallbackQuery, state: FSMContext, bot: Bot) -> None:
     await callback.answer()
-    await _do_stop(callback.message, state, bot)  # type: ignore[arg-type]
+    await _do_stop(callback.message, state, bot, user_id=callback.from_user.id)  # type: ignore[arg-type]
 
 
 # ─── Search by Gender ─────────────────────────────────────────────────────────
@@ -322,4 +326,4 @@ async def cb_search_gender_pref(callback: CallbackQuery, state: FSMContext, bot:
 
     pref = "male" if callback.data == "search_gender_male" else "female"
     await db.update_user(callback.from_user.id, {"gender_preference": pref})
-    await _do_search(callback.message, state, bot)  # type: ignore[arg-type]
+    await _do_search(callback.message, state, bot, user_id=callback.from_user.id)  # type: ignore[arg-type]

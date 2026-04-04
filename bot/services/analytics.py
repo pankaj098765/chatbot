@@ -85,7 +85,7 @@ async def get_stats() -> dict:
 
     total_attempts = match_row.get("total", 0)
     successes = match_row.get("successes", 0)
-    success_rate = (successes / total_attempts * 100) if total_attempts else 0.0
+    success_rate = (successes / total_attempts * 100) if total_attempts else None
     avg_wait = match_row.get("avg_wait") or 0.0
 
     # Session stats in the last hour
@@ -110,7 +110,7 @@ async def get_stats() -> dict:
 
     return {
         "matches_per_hour": total_attempts,
-        "success_rate_pct": round(success_rate, 1),
+        "success_rate_pct": round(success_rate, 1) if success_rate is not None else None,
         "avg_wait_time_sec": round(avg_wait, 1),
         "avg_session_duration_sec": round(session_row.get("avg_duration") or 0.0, 1),
         "avg_messages_per_session": round(session_row.get("avg_messages") or 0.0, 1),

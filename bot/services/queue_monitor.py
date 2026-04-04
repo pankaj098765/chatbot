@@ -83,8 +83,8 @@ async def collect_queue_stats() -> dict:
     # Match success rate from analytics (last hour)
     try:
         analytics = await get_stats()
-        raw_rate = analytics.get("success_rate_pct", 100.0)
-        match_success_rate = raw_rate / 100.0
+        raw_rate = analytics.get("success_rate_pct")
+        match_success_rate = raw_rate / 100.0 if raw_rate is not None else 1.0
     except Exception:
         match_success_rate = 1.0
 
@@ -199,7 +199,7 @@ async def run_queue_monitor() -> None:
             stats = await collect_queue_stats()
             logger.debug("Queue stats: %s", stats)
 
-            if should_use_fallback_early(stats):
+            if stats["total_waiting"] > 0 and should_use_fallback_early(stats):
                 logger.warning(
                     "Queue health degraded — total_waiting=%d avg_wait=%.1fs success_rate=%.0f%%",
                     stats["total_waiting"],

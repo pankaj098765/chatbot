@@ -58,6 +58,11 @@ _FIRST_SESSION_MIN_DURATION = 180.0
 # again rather than flooding the chat.
 _TOPIC_START_SILENCE_THRESHOLD = 90.0
 
+# Cue text injected into the LLM prompt when the bot needs to send a
+# proactive topic-starter (no recent user message).  This is never shown to
+# the user; it only guides the LLM to produce an opener.
+_PROACTIVE_MESSAGE_CUE = "(start a new topic or say something interesting)"
+
 
 # ─── Persona selection ────────────────────────────────────────────────────────
 
@@ -290,7 +295,7 @@ async def start_fallback_session(bot: Bot, user_id: int) -> None:
 
             # For proactive messages (no user reply yet) pass a natural cue so
             # the LLM generates an opener rather than receiving an empty prompt.
-            effective_msg = last_user_msg or "(start a new topic or say something interesting)"
+            effective_msg = last_user_msg or _PROACTIVE_MESSAGE_CUE
 
             messages = await controller.generate_response_async(
                 user_message=effective_msg,

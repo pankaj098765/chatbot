@@ -147,30 +147,6 @@ class BehaviorController:
 
         return []
 
-    async def greeting_message_async(self) -> str | None:
-        """
-        Generate an opening greeting for a new chat session via the LLM.
-
-        Returns a single greeting string, or None if the LLM is unavailable.
-        """
-        if self._llm_call_count >= MAX_LLM_CALLS_PER_SESSION:
-            return None
-
-        from bot.ai.llm_engine import generate_llm_response  # lazy import
-
-        # Use a short opener as user_message context to prompt a natural greeting.
-        context = self._build_llm_context("just joined the chat")
-        msgs = await generate_llm_response(context)
-        if msgs is None:
-            msgs = await generate_llm_response(context)
-
-        if msgs:
-            self._llm_call_count += 1
-            self._record_messages(msgs)
-            return msgs[0]
-
-        return None
-
     async def exit_message_async(self) -> str | None:
         """
         Generate a farewell message via the LLM.

@@ -213,20 +213,19 @@ async def start_fallback_session(bot: Bot, user_id: int) -> None:
     await redis.set_session(user_id, _FALLBACK_PARTNER_ID, session_id)
     await redis.set_session_tone(user_id, tone)
 
-    # Opening message after a short delay — use chat_language so the simulated
-    # partner speaks in the correct language, while system messages use ui_language.
-    await asyncio.sleep(controller.get_delay())
+    # Wait 30–40 seconds before sending the opening greeting so the chat feels
+    # natural and not like an instant bot response.
+    await asyncio.sleep(random.uniform(30.0, 40.0))
 
     # Check the session is still active before the greeting (user may have
-    # pressed /stop while we were waiting for the initial delay).
+    # pressed /stop while we were waiting).
     if await redis.get_partner(user_id) != _FALLBACK_PARTNER_ID:
         return
 
     try:
-        greeting = await controller.greeting_message_async()
-        if greeting:
-            await _send_with_typing(bot, user_id, greeting)
-            message_count += 1
+        greeting = random.choice(["hi", "hello", "hey", "👋"])
+        await _send_with_typing(bot, user_id, greeting)
+        message_count += 1
     except Exception:
         await redis.clear_session(user_id)
         return

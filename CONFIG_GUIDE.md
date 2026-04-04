@@ -140,7 +140,7 @@ DEFAULT_CHAT_MODE=native
 | **Default** | `true` |
 | **Example** | `false` |
 
-When `true`, the bot uses an LLM (via `OPENAI_API_KEY`) to generate realistic simulated partner messages when no real match is found in time.
+When `true`, the bot uses an LLM to generate realistic simulated partner messages when no real match is found in time.
 
 When `false`, the bot falls back to pre-written message templates — no API key is needed and there are no per-message AI costs.
 
@@ -150,13 +150,107 @@ AI_ENABLED=false
 ```
 
 ```
-# Enable AI (requires OPENAI_API_KEY)
+# Enable AI — zero-config, just paste your key
 AI_ENABLED=true
-OPENAI_API_KEY=sk-...
-LLM_MODEL=gpt-4o-mini
+LLM_API_KEY=your-api-key-here
 ```
 
-> **Cost note:** `gpt-4o-mini` is the recommended model for the best cost-to-quality balance. The bot sends short prompts (1–2 sentence responses), so API costs are typically very low.
+The provider and model are **auto-detected** from the key format. See `LLM_API_KEY` below.
+
+> **Cost note:** Each provider's default model is chosen for the best cost-to-quality balance. The bot sends very short prompts (1–2 sentence replies), so costs are typically low.
+
+---
+
+### `LLM_API_KEY` *(primary AI config)*
+
+| | |
+|---|---|
+| **Type** | string (API key) |
+| **Default** | *(empty — AI disabled if no key is set)* |
+| **Example** | `AIzaSy…` |
+
+**This is the only setting you need to enable AI.** Paste any API key here and the bot automatically detects which provider and model to use based on the key format.
+
+```
+LLM_API_KEY=your-api-key-here
+```
+
+**Auto-detection table:**
+
+| Key prefix | Provider | Default model used |
+|------------|----------|--------------------|
+| `sk-ant-…` | Anthropic (Claude) | `claude-3-haiku-20240307` |
+| `gsk_…` | Groq (Llama / Mixtral) | `llama-3.3-70b-versatile` |
+| `AIza…` | Gemini (Google) | `gemini-1.5-flash` |
+| `xai-…` | Grok (xAI) | `grok-3-mini` |
+| `sk-…` | OpenAI (GPT) | `gpt-4o-mini` |
+| *(other)* | OpenAI (default fallback) | `gpt-4o-mini` |
+
+The auto-detected provider is printed in the startup logs so you can verify it:
+```
+[INFO] bot.config: LLM provider auto-detected from API key format: 'gemini'
+```
+
+> **Note for DeepSeek users:** DeepSeek API keys also start with `sk-`, which is shared with OpenAI. If you have a DeepSeek key, set `LLM_PROVIDER=deepseek` explicitly alongside `LLM_API_KEY` to avoid it being treated as an OpenAI key.
+
+---
+
+### `LLM_PROVIDER` *(optional override)*
+
+| | |
+|---|---|
+| **Type** | `openai` \| `gemini` \| `grok` \| `groq` \| `mistral` \| `deepseek` \| `together` \| `anthropic` \| `custom` |
+| **Default** | *(auto-detected from key format)* |
+
+Set this only if you want to **override** the auto-detected provider, or if you are using a provider with no recognizable key prefix (Mistral, DeepSeek, Together):
+
+```
+LLM_PROVIDER=mistral
+LLM_API_KEY=your-mistral-key
+```
+
+---
+
+### `LLM_MODEL` *(optional override)*
+
+| | |
+|---|---|
+| **Type** | string |
+| **Default** | *(best default for the detected provider)* |
+
+Override the model chosen automatically. Only set this if you need a specific model:
+
+```
+LLM_MODEL=gemini-1.5-pro
+```
+
+| Provider | Default model | Other options |
+|----------|---------------|---------------|
+| openai | `gpt-4o-mini` | `gpt-4o`, `gpt-3.5-turbo` |
+| gemini | `gemini-1.5-flash` | `gemini-1.5-pro` |
+| anthropic | `claude-3-haiku-20240307` | `claude-3-5-sonnet-20241022` |
+| groq | `llama-3.3-70b-versatile` | `mixtral-8x7b-32768` |
+| grok | `grok-3-mini` | `grok-2` |
+| mistral | `mistral-small-latest` | `mistral-large-latest` |
+| deepseek | `deepseek-chat` | — |
+| together | `mistralai/Mistral-7B-Instruct-v0.1` | — |
+
+---
+
+### `LLM_BASE_URL` *(optional)*
+
+| | |
+|---|---|
+| **Type** | URL string |
+| **Default** | *(auto-set per provider)* |
+
+Only required for `LLM_PROVIDER=custom` (self-hosted or OpenAI-compatible APIs like Ollama):
+
+```
+LLM_PROVIDER=custom
+LLM_API_KEY=your-key
+LLM_BASE_URL=http://localhost:11434/v1
+```
 
 ---
 
@@ -251,6 +345,19 @@ All other settings will use their defaults from `config/default.json`.
 
 ---
 
+## AI Quickstart `.env` Example
+
+Enable AI with just one extra line — the provider and model are auto-detected:
+
+```env
+BOT_TOKEN=123456789:ABCdefGHIjklMNOpqrsTUVwxyz
+ADMIN_TOKEN=my-strong-secret-token
+AI_ENABLED=true
+LLM_API_KEY=your-api-key-here
+```
+
+---
+
 ## Full `.env` Example
 
 ```env
@@ -267,8 +374,7 @@ ALLOWED_LANGUAGES=en,hi,es
 DEFAULT_CHAT_MODE=mixed
 
 AI_ENABLED=true
-OPENAI_API_KEY=sk-your-openai-key
-LLM_MODEL=gpt-4o-mini
+LLM_API_KEY=your-api-key-here   # provider auto-detected from key format
 
 PAYMENT_ENABLED=true
 ```

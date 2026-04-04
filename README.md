@@ -107,19 +107,46 @@ The bot's welcome message will now say *"Welcome to **MyChatApp**!"*.
 
 ## 🤖 How to Enable / Disable AI
 
-**Enable AI** (users matched with a realistic AI partner when no real match is found):
+### ✅ Zero-Config Setup — one line only
+
+Just paste your API key from **any** supported provider and restart. The bot automatically detects the provider and picks the best model — nothing else needs to change:
 
 ```
 AI_ENABLED=true
-OPENAI_API_KEY=sk-...your-key...
-LLM_MODEL=gpt-4o-mini
+LLM_API_KEY=your-api-key-here
 ```
 
-**Disable AI** (template responses only — no API key required):
+**Supported providers and how the key is auto-detected:**
+
+| Key prefix | Provider | Free default model |
+|------------|----------|--------------------|
+| `sk-ant-…` | Anthropic (Claude) | `claude-3-haiku-20240307` |
+| `gsk_…`    | Groq (Llama / Mixtral) | `llama-3.3-70b-versatile` |
+| `AIza…`    | Gemini (Google) | `gemini-1.5-flash` |
+| `xai-…`    | Grok (xAI) | `grok-3-mini` |
+| `sk-…`     | OpenAI (GPT) | `gpt-4o-mini` |
+
+> For providers without a recognizable prefix (Mistral, DeepSeek, Together) either set `LLM_PROVIDER=mistral` alongside `LLM_API_KEY`, or use the provider-specific alias (`MISTRAL_API_KEY=…`).
+
+> **Note:** DeepSeek also uses `sk-…` keys. If your key starts with `sk-` but you are using DeepSeek, set `LLM_PROVIDER=deepseek` explicitly to override the auto-detection.
+
+### Override provider or model (optional)
+
+You can override the auto-detected provider and/or model:
+
+```
+LLM_API_KEY=your-api-key-here
+LLM_PROVIDER=gemini          # optional — overrides auto-detection
+LLM_MODEL=gemini-1.5-pro     # optional — overrides the default model
+```
+
+### Disable AI
 
 ```
 AI_ENABLED=false
 ```
+
+Template responses only — no API key or cost required.
 
 Restart after any change:
 

@@ -122,7 +122,7 @@ LLM_API_KEY=your-api-key-here
 |------------|----------|--------------------|
 | `sk-ant-…` | Anthropic (Claude) | `claude-3-haiku-20240307` |
 | `gsk_…`    | Groq (Llama / Mixtral) | `llama-3.3-70b-versatile` |
-| `AIza…`    | Gemini (Google) | `gemini-1.5-flash` |
+| `AIza…`    | Gemini (Google) | `gemini-2.0-flash` |
 | `xai-…`    | Grok (xAI) | `grok-3-mini` |
 | `sk-…`     | OpenAI (GPT) | `gpt-4o-mini` |
 

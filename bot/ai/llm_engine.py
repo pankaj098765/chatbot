@@ -59,7 +59,7 @@ _OPENAI_COMPAT_PROVIDERS: dict[str, str] = {
 # Users only need LLM_PROVIDER + LLM_API_KEY to get started.
 _DEFAULT_MODELS: dict[str, str] = {
     "openai":    "gpt-4o-mini",
-    "gemini":    "gemini-1.5-flash",
+    "gemini":    "gemini-2.0-flash",
     "grok":      "grok-3-mini",
     "groq":      "llama-3.3-70b-versatile",
     "mistral":   "mistral-small-latest",

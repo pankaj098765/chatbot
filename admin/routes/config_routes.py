@@ -11,7 +11,6 @@ from pydantic import BaseModel, field_validator
 from admin.auth import require_admin
 from admin.database import redis_client
 from bot.i18n.languages import SUPPORTED_LANGUAGES
-from bot.services.admin_control import get_config as get_admin_config
 from config.app_config import app_config
 
 router = APIRouter()
@@ -236,7 +235,7 @@ async def update_config(body: ConfigUpdate) -> dict:
     # For ui_language and chat_language only include the value if it is part
     # of this request — otherwise the validator would reject existing configs
     # that were set under a different language_mode.
-    current = await get_admin_config()
+    current = await redis_client.get_admin_config()
     merged_mode = str(updates.get("language_mode", current.get("language_mode", "english")))
     merged_native = str(updates.get("native_language", current.get("native_language", "en")))
     merged_ui: str | None = updates.get("ui_language")

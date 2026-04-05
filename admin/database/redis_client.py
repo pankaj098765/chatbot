@@ -84,3 +84,30 @@ async def get_admin_config() -> dict:
 async def set_admin_config_bulk(mapping: dict[str, float]) -> None:
     """Persist multiple admin config values to Redis."""
     await _r().hset(ADMIN_CONFIG_KEY, mapping={k: str(v) for k, v in mapping.items()})
+
+
+# ─── Admin IP sessions ───────────────────────────────────────────────────────
+
+_IP_SESSION_PREFIX = "admin:session:ip:"
+IP_SESSION_TTL = 30 * 24 * 3600  # 30 days
+
+
+async def create_ip_session(ip: str, ttl: int = IP_SESSION_TTL) -> None:
+    """Record an authenticated IP address; refreshes TTL on every call."""
+    await _r().set(f"{_IP_SESSION_PREFIX}{ip}", "1", ex=ttl)
+
+
+async def check_ip_session(ip: str) -> bool:
+    """Return True if the IP has an active admin session."""
+    return bool(await _r().exists(f"{_IP_SESSION_PREFIX}{ip}"))
+
+
+async def get_ip_session_ttl(ip: str) -> int:
+    """Return seconds remaining for the IP session, or 0 if not found/expired."""
+    ttl = await _r().ttl(f"{_IP_SESSION_PREFIX}{ip}")
+    return max(0, ttl)
+
+
+async def delete_ip_session(ip: str) -> None:
+    """Revoke an IP session immediately (logout)."""
+    await _r().delete(f"{_IP_SESSION_PREFIX}{ip}")

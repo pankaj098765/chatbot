@@ -23,6 +23,7 @@ import time
 from aiogram import Bot, F, Router
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
+from aiogram.fsm.storage.base import StorageKey
 from aiogram.types import CallbackQuery, Message
 
 from bot.config import settings
@@ -42,6 +43,13 @@ from bot.services.retention_engine import apply_warm_start_boost
 from bot.utils.states import UserState
 
 router = Router()
+
+
+async def _reset_partner_state(state: FSMContext, bot: Bot, partner_id: int) -> None:
+    """Reset the partner's FSM state to IDLE so they can /search again."""
+    partner_key = StorageKey(bot_id=bot.id, chat_id=partner_id, user_id=partner_id)
+    partner_state = FSMContext(storage=state.storage, key=partner_key)
+    await partner_state.set_state(UserState.IDLE)
 
 
 # ─── /search ──────────────────────────────────────────────────────────────────
@@ -209,6 +217,8 @@ async def _do_next(message: Message, state: FSMContext, bot: Bot, user_id: int |
 
     # UPDATED: all users share the same global language
     if partner_id and partner_id > 0:
+        # Reset partner's FSM state to IDLE so they can /search again
+        await _reset_partner_state(state, bot, partner_id)
         try:
             await bot.send_message(
                 partner_id,
@@ -259,6 +269,8 @@ async def _do_stop(message: Message, state: FSMContext, bot: Bot, user_id: int |
 
     # UPDATED: all users share the same global language
     if partner_id and partner_id > 0:
+        # Reset partner's FSM state to IDLE so they can /search again
+        await _reset_partner_state(state, bot, partner_id)
         try:
             await bot.send_message(
                 partner_id,

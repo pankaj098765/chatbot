@@ -23,6 +23,7 @@ from fastapi.staticfiles import StaticFiles
 
 from admin.database import mongodb, redis_client
 from admin.routes.config_routes import router as config_router
+from admin.routes.session_routes import router as session_router
 from admin.routes.stats import router as stats_router
 from config.app_config import app_config
 
@@ -57,6 +58,7 @@ app = FastAPI(
 
 app.include_router(stats_router, prefix="/admin")
 app.include_router(config_router, prefix="/admin")
+app.include_router(session_router, prefix="/admin")
 
 
 # ─── Static dashboard ─────────────────────────────────────────────────────────

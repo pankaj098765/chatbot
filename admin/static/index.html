@@ -492,15 +492,91 @@
 <script>
   // ── State ────────────────────────────────────────────────────────────────────
   const REFRESH_INTERVAL_MS = 7000; // auto-refresh interval for live stats (ms)
+  const LS_TOKEN_KEY   = 'admin_token';       // localStorage key for saved token
+  const LS_TS_KEY      = 'admin_token_ts';    // localStorage key for token timestamp
+  // NOTE: SESSION_MAX_MS must stay in sync with IP_SESSION_TTL in admin/database/redis_client.py
+  const SESSION_MAX_MS = 8 * 60 * 60 * 1000; // 8 hours in milliseconds
+
   let adminToken = '';
+  let usingIpSession = false; // true when connected via server-side IP session
   let refreshInterval = null;
   let configDraft = {};
+
+  // ── Session helpers ───────────────────────────────────────────────────────────
+  function saveTokenLocally(token) {
+    try {
+      localStorage.setItem(LS_TOKEN_KEY, token);
+      localStorage.setItem(LS_TS_KEY, Date.now().toString());
+    } catch (_) {}
+  }
+
+  function loadTokenLocally() {
+    try {
+      const token = localStorage.getItem(LS_TOKEN_KEY);
+      const ts    = parseInt(localStorage.getItem(LS_TS_KEY) || '0', 10);
+      if (token && (Date.now() - ts) < SESSION_MAX_MS) return token;
+      localStorage.removeItem(LS_TOKEN_KEY);
+      localStorage.removeItem(LS_TS_KEY);
+    } catch (_) {}
+    return null;
+  }
+
+  function clearTokenLocally() {
+    try {
+      localStorage.removeItem(LS_TOKEN_KEY);
+      localStorage.removeItem(LS_TS_KEY);
+    } catch (_) {}
+  }
+
+  function connectWithToken(token, isIpSession) {
+    adminToken     = token || '';
+    usingIpSession = isIpSession;
+    const tokenInput = document.getElementById('tokenInput');
+    if (!isIpSession && token) tokenInput.value = token;
+    fetchStats();
+    fetchConfig();
+    loadLanguageOptions();
+    startAutoRefresh();
+  }
+
+  // ── Page load: auto-connect via IP session or saved token ────────────────────
+  async function tryAutoConnect() {
+    // 1. Check server-side IP session (no token needed)
+    try {
+      const res  = await fetch('/admin/session/status');
+      const data = await res.json();
+      if (data.active) {
+        connectWithToken('', true);
+        const hrs = Math.ceil(data.ttl / 3600);
+        showToast(`Session active (${hrs}h remaining) ✓`, 'success');
+        return;
+      }
+    } catch (_) {}
+
+    // 2. Try saved token from localStorage
+    const saved = loadTokenLocally();
+    if (saved) {
+      // Quick validation: call stats; if 401, clear and fall through
+      try {
+        const headers = { 'Authorization': 'Bearer ' + saved, 'Content-Type': 'application/json' };
+        const res = await fetch('/admin/stats', { headers });
+        if (res.ok) {
+          connectWithToken(saved, false);
+          return;
+        }
+      } catch (_) {}
+      clearTokenLocally();
+    }
+  }
 
   // ── Auth ─────────────────────────────────────────────────────────────────────
   const tokenInput = document.getElementById('tokenInput');
   tokenInput.addEventListener('change', () => {
-    adminToken = tokenInput.value.trim();
-    if (adminToken) {
+    const token = tokenInput.value.trim();
+    if (token) {
+      adminToken     = token;
+      usingIpSession = false;
+      saveTokenLocally(token);
       fetchStats();
       fetchConfig();
       loadLanguageOptions();
@@ -518,19 +594,26 @@
 
   // ── Fetch helpers ─────────────────────────────────────────────────────────────
   async function apiFetch(path, options = {}) {
-    const headers = { 'Authorization': 'Bearer ' + adminToken, 'Content-Type': 'application/json' };
+    const headers = { 'Content-Type': 'application/json' };
+    // Only send the Authorization header when we have an actual token.
+    // When using an IP session the backend identifies us by IP, no token needed.
+    if (adminToken) headers['Authorization'] = 'Bearer ' + adminToken;
     const res = await fetch(path, { ...options, headers });
-    if (!res.ok) throw new Error(await res.text());
+    if (!res.ok) {
+      const err = new Error(await res.text());
+      err.status = res.status;
+      throw err;
+    }
     return res.json();
   }
 
   // ── Stats ─────────────────────────────────────────────────────────────────────
   async function fetchStats() {
-    if (!adminToken) return;
+    if (!adminToken && !usingIpSession) return;
     try {
       const data = await apiFetch('/admin/stats');
       document.getElementById('authBadge').className = 'badge connected';
-      document.getElementById('authBadge').textContent = 'Connected';
+      document.getElementById('authBadge').textContent = usingIpSession ? 'Connected (IP session)' : 'Connected';
       updateStats(data);
       document.getElementById('lastUpdated').textContent =
         'Last updated: ' + new Date().toLocaleTimeString();
@@ -538,6 +621,12 @@
       document.getElementById('authBadge').className = 'badge disconnected';
       document.getElementById('authBadge').textContent = 'Auth failed';
       document.getElementById('lastUpdated').textContent = 'Error: ' + e.message;
+      // If the session expired, clear local data so the token input shows again
+      if (e.status === 401) {
+        clearTokenLocally();
+        adminToken     = '';
+        usingIpSession = false;
+      }
     }
   }
 
@@ -567,7 +656,7 @@
 
   // ── Config ────────────────────────────────────────────────────────────────────
   async function fetchConfig() {
-    if (!adminToken) return;
+    if (!adminToken && !usingIpSession) return;
     try {
       const cfg = await apiFetch('/admin/config');
       applyConfigToUI(cfg);
@@ -690,11 +779,22 @@
   const _LANG_FLAGS = {
     en:'🇬🇧', hi:'🇮🇳', es:'🇪🇸', fr:'🇫🇷', de:'🇩🇪',
     pt:'🇧🇷', ar:'🇸🇦', ru:'🇷🇺', tr:'🇹🇷', id:'🇮🇩',
+    zh:'🇨🇳', ja:'🇯🇵', ko:'🇰🇷', bn:'🇧🇩', ur:'🇵🇰',
+    vi:'🇻🇳', th:'🇹🇭', fa:'🇮🇷', ms:'🇲🇾', ta:'🇱🇰',
+    te:'🇮🇳', mr:'🇮🇳', gu:'🇮🇳', pa:'🇮🇳', kn:'🇮🇳',
+    ml:'🇮🇳', si:'🇱🇰', my:'🇲🇲', km:'🇰🇭', lo:'🇱🇦',
+    ne:'🇳🇵', it:'🇮🇹', nl:'🇳🇱', pl:'🇵🇱', uk:'🇺🇦',
+    sv:'🇸🇪', ro:'🇷🇴', cs:'🇨🇿', el:'🇬🇷', hu:'🇭🇺',
+    da:'🇩🇰', fi:'🇫🇮', sk:'🇸🇰', bg:'🇧🇬', hr:'🇭🇷',
+    sr:'🇷🇸', lt:'🇱🇹', lv:'🇱🇻', et:'🇪🇪', sl:'🇸🇮',
+    no:'🇳🇴', ca:'🇪🇸', sw:'🇰🇪', am:'🇪🇹', ha:'🇳🇬',
+    yo:'🇳🇬', ig:'🇳🇬', zu:'🇿🇦', af:'🇿🇦', he:'🇮🇱',
+    tl:'🇵🇭', jv:'🇮🇩', az:'🇦🇿', kk:'🇰🇿', uz:'🇺🇿',
   };
 
   // Populate all three language selects from the /admin/languages API
   async function loadLanguageOptions() {
-    if (!adminToken) return;
+    if (!adminToken && !usingIpSession) return;
     try {
       const data = await apiFetch('/admin/languages');
       const langs = data.languages || {};
@@ -716,7 +816,7 @@
 
   // ── Apply config ──────────────────────────────────────────────────────────────
   async function applyConfig() {
-    if (!adminToken) { showToast('Enter admin token first', 'error'); return; }
+    if (!adminToken && !usingIpSession) { showToast('Enter admin token first', 'error'); return; }
     const btn = document.getElementById('applyBtn');
     btn.disabled = true;
     btn.textContent = 'Applying…';
@@ -743,6 +843,9 @@
     t.style.display = 'block';
     setTimeout(() => { t.style.display = 'none'; }, 3000);
   }
+
+  // ── Boot: try to auto-connect on page load ────────────────────────────────────
+  tryAutoConnect();
 </script>
 </body>
 </html>

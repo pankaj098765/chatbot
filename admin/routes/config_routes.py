@@ -40,43 +40,7 @@ LANGUAGE_PRESETS: dict[str, dict[str, str]] = {
     },
 }
 
-# ─── Helpers ──────────────────────────────────────────────────────────────────
 
-def _validate_language_combination(
-    language_mode: str,
-    native_language: str,
-    ui_language: str | None,
-    chat_language: str | None,
-) -> None:
-    """
-    Raise HTTPException 422 for invalid language combinations.
-
-    Rules:
-    - "native" or "mixed" mode requires a non-English native_language.
-    - "english" mode must not set ui_language or chat_language to a non-English code.
-    """
-    if language_mode in ("native", "mixed") and native_language == "en":
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail=(
-                f"language_mode='{language_mode}' requires a non-English native_language. "
-                "Use language_mode='english' for English-only mode, or set a non-English "
-                "native_language (e.g. 'hi', 'es')."
-            ),
-        )
-    if language_mode == "english":
-        for field_name, lang_code in (
-            ("ui_language", ui_language),
-            ("chat_language", chat_language),
-        ):
-            if lang_code is not None and lang_code != "en":
-                raise HTTPException(
-                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                    detail=(
-                        f"{field_name}='{lang_code}' conflicts with language_mode='english'. "
-                        f"Set {field_name}='en' or switch to a non-English language_mode."
-                    ),
-                )
 
 
 class ConfigUpdate(BaseModel):
@@ -221,7 +185,6 @@ async def update_config(body: ConfigUpdate) -> dict:
     Update one or more admin config values.
 
     Only the fields provided in the request body will be updated.
-    Cross-field safety check prevents invalid language combinations.
     Returns the full config after the update.
     """
     updates = body.model_dump(exclude_none=True)
@@ -230,17 +193,6 @@ async def update_config(body: ConfigUpdate) -> dict:
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="No config fields provided",
         )
-
-    # Safety check: validate language combination against merged state.
-    # For ui_language and chat_language only include the value if it is part
-    # of this request — otherwise the validator would reject existing configs
-    # that were set under a different language_mode.
-    current = await redis_client.get_admin_config()
-    merged_mode = str(updates.get("language_mode", current.get("language_mode", "english")))
-    merged_native = str(updates.get("native_language", current.get("native_language", "en")))
-    merged_ui: str | None = updates.get("ui_language")
-    merged_chat: str | None = updates.get("chat_language")
-    _validate_language_combination(merged_mode, merged_native, merged_ui, merged_chat)
 
     await redis_client.set_admin_config_bulk(updates)
     return await redis_client.get_admin_config()

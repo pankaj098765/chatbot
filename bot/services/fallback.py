@@ -193,7 +193,8 @@ async def start_fallback_session(bot: Bot, user_id: int) -> None:
 
     # UPDATED: read global language config — NOT per-user language fields
     lang = await get_ui_lang()                                   # ui language for t()
-    chat_language: str = str(config.get("native_language", "en"))
+    chat_language_raw = config.get("chat_language")
+    chat_language: str = str(chat_language_raw) if chat_language_raw else str(config.get("native_language", "en"))
     chat_mode: str = str(config.get("language_mode", "english"))
 
     # Feature 9: Read current global patterns before picking persona
@@ -205,8 +206,9 @@ async def start_fallback_session(bot: Bot, user_id: int) -> None:
         persona_name=persona_name,
         randomness_level=randomness_level,  # Feature 6
         tone=tone,                          # Tone system
-        native_language=chat_language,      # UPDATED: global language_mode/native_language
-        language_mode=chat_mode,            # UPDATED: global language_mode/native_language
+        native_language=str(config.get("native_language", "en")),
+        language_mode=chat_mode,
+        chat_language=chat_language,        # explicit chat/LLM language channel
         engagement_score=engagement_score,  # Smart LLM: prior engagement gate
     )
     await _record_persona_used(user_id, persona_name)

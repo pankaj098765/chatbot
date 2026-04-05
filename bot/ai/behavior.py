@@ -49,6 +49,7 @@ class BehaviorController:
         tone: str = "neutral",          # "feminine" | "neutral" | "masculine"
         native_language: str = "en",    # ISO 639-1 code from admin config
         language_mode: str = "english", # "english" | "native" | "mixed"
+        chat_language: str = "",        # explicit LLM response language; falls back to native_language
         engagement_score: float = 0.0,  # kept for API compatibility; unused
     ) -> None:
         self._persona: Persona = (
@@ -63,6 +64,8 @@ class BehaviorController:
         self._language_mode: str = (
             language_mode if language_mode in ("english", "native", "mixed") else "english"
         )
+        # chat_language overrides native_language for LLM responses when set
+        self._chat_language: str = chat_language or self._native_language
         self._message_count: int = 0
         self._llm_call_count: int = 0
         # Short-term context: last few messages sent (for LLM history)
@@ -103,9 +106,9 @@ class BehaviorController:
             "tone": self._tone,
             "history": list(self._context[-3:]),
             "emotional_state": self._persona.emotional_mode,
-            "native_language": self._native_language,
+            "native_language": self._chat_language,
             "language_mode": self._language_mode,
-            "chat_language": self._native_language,
+            "chat_language": self._chat_language,
         }
 
     def _record_messages(self, msgs: list[str]) -> None:

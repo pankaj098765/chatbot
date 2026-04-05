@@ -240,6 +240,25 @@ async def update_config(body: ConfigUpdate) -> dict:
     merged_native = str(updates.get("native_language", current.get("native_language", "en")))
     merged_ui: str | None = updates.get("ui_language")
     merged_chat: str | None = updates.get("chat_language")
+
+    # Auto-coerce: if ui_language or chat_language is being set to a non-English
+    # code while language_mode is 'english' and the caller did not explicitly
+    # change language_mode, automatically switch to 'native' mode so the save
+    # succeeds without a confusing conflict error.
+    if merged_mode == "english" and "language_mode" not in updates:
+        if merged_ui and merged_ui != "en":
+            non_en_lang: str | None = merged_ui
+        elif merged_chat and merged_chat != "en":
+            non_en_lang = merged_chat
+        else:
+            non_en_lang = None
+        if non_en_lang:
+            updates["language_mode"] = "native"
+            if merged_native == "en":
+                updates["native_language"] = non_en_lang
+            merged_mode = "native"
+            merged_native = str(updates.get("native_language", merged_native))
+
     _validate_language_combination(merged_mode, merged_native, merged_ui, merged_chat)
 
     await redis_client.set_admin_config_bulk(updates)

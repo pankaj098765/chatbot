@@ -302,6 +302,59 @@
 
     /* ── Loading skeleton ── */
     .loading { color: var(--muted); font-size: 1.5rem; }
+
+    /* ── Session expiry warning banner ── */
+    .session-warning {
+      display: none;
+      background: #451a03;
+      border: 1px solid var(--warning);
+      border-radius: var(--radius);
+      padding: 12px 18px;
+      margin-bottom: 16px;
+      font-size: 0.85rem;
+      color: var(--warning);
+      align-items: center;
+      gap: 12px;
+      justify-content: space-between;
+    }
+    .session-warning button {
+      background: var(--warning);
+      color: #000;
+      border: none;
+      border-radius: 6px;
+      padding: 5px 14px;
+      font-size: 0.8rem;
+      font-weight: 700;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+
+    /* ── Language value badge ── */
+    .cfg-value.lang-val {
+      font-size: 0.78rem;
+      max-width: 170px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      text-align: right;
+    }
+
+    /* ── Language picker select ── */
+    .lang-select {
+      width: 100%;
+      margin-top: 6px;
+      border-radius: 8px;
+      background: var(--bg);
+      color: var(--text);
+      border: 1px solid var(--border);
+      font-size: 0.85rem;
+      padding: 4px;
+      min-height: 130px;
+      outline: none;
+    }
+    .lang-select:focus { border-color: var(--accent); }
+    .lang-select option { padding: 5px 8px; cursor: pointer; }
+    .lang-select option:checked { background: #1e3a5f; color: var(--accent); }
   </style>
 </head>
 <body>
@@ -315,6 +368,12 @@
 </header>
 
 <main>
+  <!-- ── Session expiry warning ── -->
+  <div id="sessionWarning" class="session-warning">
+    <span id="sessionWarningText">⚠️ Admin session expiring soon</span>
+    <button onclick="renewSession()">🔑 Renew Session</button>
+  </div>
+
   <!-- ── Live Stats ── -->
   <div class="refresh-row">
     <div class="live-dot"></div>
@@ -440,14 +499,13 @@
     <div class="config-card">
       <div class="cfg-label">
         <span class="cfg-name">Native Language</span>
-        <span class="cfg-value" id="v-native_language">en</span>
+        <span class="cfg-value lang-val" id="v-native_language">English (United Kingdom)</span>
       </div>
       <div class="cfg-desc">Language used when Mode is "native" or "mixed" (e.g. Hinglish, Spanglish, Franglais).</div>
       <input type="text" id="native_lang_search" placeholder="🔍 Search language…"
              style="width:100%;padding:7px 10px;border-radius:8px;background:var(--bg);color:var(--text);border:1px solid var(--border);margin-top:8px;font-size:0.85rem;"
              oninput="filterLangSelect('s-native_language', this.value)" />
-      <select id="s-native_language" size="5"
-              style="width:100%;margin-top:6px;border-radius:8px;background:var(--bg);color:var(--text);border:1px solid var(--border);font-size:0.85rem;padding:4px;"
+      <select id="s-native_language" class="lang-select"
               onchange="syncSelect('native_language', this.value)">
       </select>
     </div>
@@ -455,14 +513,13 @@
     <div class="config-card">
       <div class="cfg-label">
         <span class="cfg-name">UI Language</span>
-        <span class="cfg-value" id="v-ui_language">en</span>
+        <span class="cfg-value lang-val" id="v-ui_language">English (United Kingdom)</span>
       </div>
       <div class="cfg-desc">Language for buttons and menus. Can differ from the AI chat language.</div>
       <input type="text" id="ui_lang_search" placeholder="🔍 Search language…"
              style="width:100%;padding:7px 10px;border-radius:8px;background:var(--bg);color:var(--text);border:1px solid var(--border);margin-top:8px;font-size:0.85rem;"
              oninput="filterLangSelect('s-ui_language', this.value)" />
-      <select id="s-ui_language" size="5"
-              style="width:100%;margin-top:6px;border-radius:8px;background:var(--bg);color:var(--text);border:1px solid var(--border);font-size:0.85rem;padding:4px;"
+      <select id="s-ui_language" class="lang-select"
               onchange="syncSelect('ui_language', this.value)">
       </select>
     </div>
@@ -470,14 +527,13 @@
     <div class="config-card">
       <div class="cfg-label">
         <span class="cfg-name">Chat Language (AI)</span>
-        <span class="cfg-value" id="v-chat_language">en</span>
+        <span class="cfg-value lang-val" id="v-chat_language">English (United Kingdom)</span>
       </div>
       <div class="cfg-desc">Language the AI uses for responses. Independent of UI language.</div>
       <input type="text" id="chat_lang_search" placeholder="🔍 Search language…"
              style="width:100%;padding:7px 10px;border-radius:8px;background:var(--bg);color:var(--text);border:1px solid var(--border);margin-top:8px;font-size:0.85rem;"
              oninput="filterLangSelect('s-chat_language', this.value)" />
-      <select id="s-chat_language" size="5"
-              style="width:100%;margin-top:6px;border-radius:8px;background:var(--bg);color:var(--text);border:1px solid var(--border);font-size:0.85rem;padding:4px;"
+      <select id="s-chat_language" class="lang-select"
               onchange="syncSelect('chat_language', this.value)">
       </select>
     </div>
@@ -495,7 +551,8 @@
   const LS_TOKEN_KEY   = 'admin_token';       // localStorage key for saved token
   const LS_TS_KEY      = 'admin_token_ts';    // localStorage key for token timestamp
   // NOTE: SESSION_MAX_MS must stay in sync with IP_SESSION_TTL in admin/database/redis_client.py
-  const SESSION_MAX_MS = 8 * 60 * 60 * 1000; // 8 hours in milliseconds
+  const SESSION_MAX_MS = 30 * 24 * 60 * 60 * 1000; // 30 days in milliseconds
+  const SESSION_WARN_S = 2 * 24 * 3600;       // warn when < 2 days remain
 
   let adminToken = '';
   let usingIpSession = false; // true when connected via server-side IP session
@@ -533,6 +590,7 @@
     usingIpSession = isIpSession;
     const tokenInput = document.getElementById('tokenInput');
     if (!isIpSession && token) tokenInput.value = token;
+    hideSessionWarning();
     fetchStats();
     fetchConfig();
     loadLanguageOptions();
@@ -547,8 +605,13 @@
       const data = await res.json();
       if (data.active) {
         connectWithToken('', true);
-        const hrs = Math.ceil(data.ttl / 3600);
-        showToast(`Session active (${hrs}h remaining) ✓`, 'success');
+        if (data.ttl <= SESSION_WARN_S) {
+          // Session expiring soon — show warning banner and ask to renew
+          showSessionWarning(data.ttl);
+        } else {
+          const days = Math.ceil(data.ttl / 86400);
+          showToast(`Session active (${days}d remaining) ✓`, 'success');
+        }
         return;
       }
     } catch (_) {}
@@ -567,6 +630,34 @@
       } catch (_) {}
       clearTokenLocally();
     }
+  }
+
+  // ── Session expiry warning ────────────────────────────────────────────────────
+  function showSessionWarning(ttlSeconds) {
+    const banner = document.getElementById('sessionWarning');
+    const text   = document.getElementById('sessionWarningText');
+    if (!banner) return;
+    const hrs  = Math.ceil(ttlSeconds / 3600);
+    const days = Math.floor(ttlSeconds / 86400);
+    const remaining = days > 0 ? `${days}d ${Math.ceil((ttlSeconds % 86400) / 3600)}h` : `${hrs}h`;
+    text.textContent = `⚠️ Admin session expires in ${remaining} — enter your token to renew for 30 more days.`;
+    banner.style.display = 'flex';
+  }
+
+  function hideSessionWarning() {
+    const banner = document.getElementById('sessionWarning');
+    if (banner) banner.style.display = 'none';
+  }
+
+  function renewSession() {
+    // Focus the token input so the admin can type their token
+    const tokenInput = document.getElementById('tokenInput');
+    if (tokenInput) {
+      tokenInput.focus();
+      tokenInput.select();
+    }
+    hideSessionWarning();
+    showToast('Enter your admin token to extend the session.', 'success');
   }
 
   // ── Auth ─────────────────────────────────────────────────────────────────────
@@ -707,7 +798,7 @@
       const sel = document.getElementById('s-' + key);
       if (sel) sel.value = val;
       const lbl = document.getElementById('v-' + key);
-      if (lbl) lbl.textContent = val;
+      if (lbl) lbl.textContent = getLangLabel(val);
       configDraft[key] = val;
     });
   }
@@ -758,39 +849,120 @@
   // UPDATED: sync select (dropdown) config fields
   function syncSelect(key, val) {
     const lbl = document.getElementById('v-' + key);
-    if (lbl) lbl.textContent = val;
+    if (lbl) {
+      // For language fields show the full human-readable label; for other selects show the raw value
+      const langKeys = ['native_language', 'ui_language', 'chat_language'];
+      lbl.textContent = langKeys.includes(key) ? getLangLabel(val) : val;
+    }
     configDraft[key] = val;
+  }
+
+  // ── Language metadata ─────────────────────────────────────────────────────────
+  // Per-language: flag emoji, English name, and primary country for display.
+  const _LANG_META = {
+    en:  { flag: '🇬🇧', name: 'English',      country: 'United Kingdom' },
+    hi:  { flag: '🇮🇳', name: 'Hindi',         country: 'India' },
+    es:  { flag: '🇪🇸', name: 'Spanish',       country: 'Spain' },
+    fr:  { flag: '🇫🇷', name: 'French',        country: 'France' },
+    de:  { flag: '🇩🇪', name: 'German',        country: 'Germany' },
+    pt:  { flag: '🇧🇷', name: 'Portuguese',    country: 'Brazil' },
+    ar:  { flag: '🇸🇦', name: 'Arabic',        country: 'Saudi Arabia' },
+    ru:  { flag: '🇷🇺', name: 'Russian',       country: 'Russia' },
+    tr:  { flag: '🇹🇷', name: 'Turkish',       country: 'Turkey' },
+    id:  { flag: '🇮🇩', name: 'Indonesian',    country: 'Indonesia' },
+    zh:  { flag: '🇨🇳', name: 'Chinese',       country: 'China' },
+    ja:  { flag: '🇯🇵', name: 'Japanese',      country: 'Japan' },
+    ko:  { flag: '🇰🇷', name: 'Korean',        country: 'South Korea' },
+    bn:  { flag: '🇧🇩', name: 'Bengali',       country: 'Bangladesh' },
+    ur:  { flag: '🇵🇰', name: 'Urdu',          country: 'Pakistan' },
+    vi:  { flag: '🇻🇳', name: 'Vietnamese',    country: 'Vietnam' },
+    th:  { flag: '🇹🇭', name: 'Thai',          country: 'Thailand' },
+    fa:  { flag: '🇮🇷', name: 'Persian',       country: 'Iran' },
+    ms:  { flag: '🇲🇾', name: 'Malay',         country: 'Malaysia' },
+    ta:  { flag: '🇮🇳', name: 'Tamil',         country: 'India' },
+    te:  { flag: '🇮🇳', name: 'Telugu',        country: 'India' },
+    mr:  { flag: '🇮🇳', name: 'Marathi',       country: 'India' },
+    gu:  { flag: '🇮🇳', name: 'Gujarati',      country: 'India' },
+    pa:  { flag: '🇮🇳', name: 'Punjabi',       country: 'India' },
+    kn:  { flag: '🇮🇳', name: 'Kannada',       country: 'India' },
+    ml:  { flag: '🇮🇳', name: 'Malayalam',     country: 'India' },
+    si:  { flag: '🇱🇰', name: 'Sinhala',       country: 'Sri Lanka' },
+    my:  { flag: '🇲🇲', name: 'Burmese',       country: 'Myanmar' },
+    km:  { flag: '🇰🇭', name: 'Khmer',         country: 'Cambodia' },
+    lo:  { flag: '🇱🇦', name: 'Lao',           country: 'Laos' },
+    ne:  { flag: '🇳🇵', name: 'Nepali',        country: 'Nepal' },
+    it:  { flag: '🇮🇹', name: 'Italian',       country: 'Italy' },
+    nl:  { flag: '🇳🇱', name: 'Dutch',         country: 'Netherlands' },
+    pl:  { flag: '🇵🇱', name: 'Polish',        country: 'Poland' },
+    uk:  { flag: '🇺🇦', name: 'Ukrainian',     country: 'Ukraine' },
+    sv:  { flag: '🇸🇪', name: 'Swedish',       country: 'Sweden' },
+    ro:  { flag: '🇷🇴', name: 'Romanian',      country: 'Romania' },
+    cs:  { flag: '🇨🇿', name: 'Czech',         country: 'Czech Republic' },
+    el:  { flag: '🇬🇷', name: 'Greek',         country: 'Greece' },
+    hu:  { flag: '🇭🇺', name: 'Hungarian',     country: 'Hungary' },
+    da:  { flag: '🇩🇰', name: 'Danish',        country: 'Denmark' },
+    fi:  { flag: '🇫🇮', name: 'Finnish',       country: 'Finland' },
+    sk:  { flag: '🇸🇰', name: 'Slovak',        country: 'Slovakia' },
+    bg:  { flag: '🇧🇬', name: 'Bulgarian',     country: 'Bulgaria' },
+    hr:  { flag: '🇭🇷', name: 'Croatian',      country: 'Croatia' },
+    sr:  { flag: '🇷🇸', name: 'Serbian',       country: 'Serbia' },
+    lt:  { flag: '🇱🇹', name: 'Lithuanian',    country: 'Lithuania' },
+    lv:  { flag: '🇱🇻', name: 'Latvian',       country: 'Latvia' },
+    et:  { flag: '🇪🇪', name: 'Estonian',      country: 'Estonia' },
+    sl:  { flag: '🇸🇮', name: 'Slovenian',     country: 'Slovenia' },
+    no:  { flag: '🇳🇴', name: 'Norwegian',     country: 'Norway' },
+    ca:  { flag: '🇪🇸', name: 'Catalan',       country: 'Spain (Catalonia)' },
+    sw:  { flag: '🇰🇪', name: 'Swahili',       country: 'Kenya' },
+    am:  { flag: '🇪🇹', name: 'Amharic',       country: 'Ethiopia' },
+    ha:  { flag: '🇳🇬', name: 'Hausa',         country: 'Nigeria' },
+    yo:  { flag: '🇳🇬', name: 'Yoruba',        country: 'Nigeria' },
+    ig:  { flag: '🇳🇬', name: 'Igbo',          country: 'Nigeria' },
+    zu:  { flag: '🇿🇦', name: 'Zulu',          country: 'South Africa' },
+    af:  { flag: '🇿🇦', name: 'Afrikaans',     country: 'South Africa' },
+    he:  { flag: '🇮🇱', name: 'Hebrew',        country: 'Israel' },
+    tl:  { flag: '🇵🇭', name: 'Filipino',      country: 'Philippines' },
+    jv:  { flag: '🇮🇩', name: 'Javanese',      country: 'Indonesia' },
+    az:  { flag: '🇦🇿', name: 'Azerbaijani',   country: 'Azerbaijan' },
+    kk:  { flag: '🇰🇿', name: 'Kazakh',        country: 'Kazakhstan' },
+    uz:  { flag: '🇺🇿', name: 'Uzbek',         country: 'Uzbekistan' },
+  };
+
+  // Cached flat list of languages populated by loadLanguageOptions()
+  let _allLangs = [];  // [{code, label, search}]
+
+  // Return the human-readable display string for a given ISO code, e.g.:
+  //   getLangLabel('en') → '🇬🇧 English (United Kingdom)'
+  function getLangLabel(code) {
+    const m = _LANG_META[code];
+    if (m) return `${m.flag} ${m.name} (${m.country})`;
+    // Fallback for unknown codes: just show the code in uppercase
+    return `🌐 ${code.toUpperCase()}`;
   }
 
   // ── Language dropdown helpers ─────────────────────────────────────────────────
 
-  // Filter any language <select> by a search query
+  // Rebuild a language <select> from _allLangs, putting items matching `query` first.
   function filterLangSelect(selectId, query) {
     const sel = document.getElementById(selectId);
-    if (!sel) return;
+    if (!sel || !_allLangs.length) return;
     const q = query.trim().toLowerCase();
-    Array.from(sel.options).forEach(opt => {
-      const visible = !q || opt.text.toLowerCase().includes(q) || opt.value.toLowerCase().includes(q);
-      opt.style.display = visible ? '' : 'none';
-    });
+    const current = sel.value;
+    // Partition into matching (top) and rest (bottom)
+    const matches = q ? _allLangs.filter(l => l.search.includes(q)) : [];
+    const rest    = q ? _allLangs.filter(l => !l.search.includes(q)) : _allLangs;
+    sel.innerHTML = '';
+    const addOpt = (l) => {
+      const opt = document.createElement('option');
+      opt.value = l.code;
+      opt.textContent = l.label;
+      sel.appendChild(opt);
+    };
+    matches.forEach(addOpt);
+    rest.forEach(addOpt);
+    // Restore selection if still in list, else select top match
+    if (current) sel.value = current;
+    if (q && matches.length) sel.value = matches[0].code;
   }
-
-  // Flags for well-known language codes
-  const _LANG_FLAGS = {
-    en:'🇬🇧', hi:'🇮🇳', es:'🇪🇸', fr:'🇫🇷', de:'🇩🇪',
-    pt:'🇧🇷', ar:'🇸🇦', ru:'🇷🇺', tr:'🇹🇷', id:'🇮🇩',
-    zh:'🇨🇳', ja:'🇯🇵', ko:'🇰🇷', bn:'🇧🇩', ur:'🇵🇰',
-    vi:'🇻🇳', th:'🇹🇭', fa:'🇮🇷', ms:'🇲🇾', ta:'🇱🇰',
-    te:'🇮🇳', mr:'🇮🇳', gu:'🇮🇳', pa:'🇮🇳', kn:'🇮🇳',
-    ml:'🇮🇳', si:'🇱🇰', my:'🇲🇲', km:'🇰🇭', lo:'🇱🇦',
-    ne:'🇳🇵', it:'🇮🇹', nl:'🇳🇱', pl:'🇵🇱', uk:'🇺🇦',
-    sv:'🇸🇪', ro:'🇷🇴', cs:'🇨🇿', el:'🇬🇷', hu:'🇭🇺',
-    da:'🇩🇰', fi:'🇫🇮', sk:'🇸🇰', bg:'🇧🇬', hr:'🇭🇷',
-    sr:'🇷🇸', lt:'🇱🇹', lv:'🇱🇻', et:'🇪🇪', sl:'🇸🇮',
-    no:'🇳🇴', ca:'🇪🇸', sw:'🇰🇪', am:'🇪🇹', ha:'🇳🇬',
-    yo:'🇳🇬', ig:'🇳🇬', zu:'🇿🇦', af:'🇿🇦', he:'🇮🇱',
-    tl:'🇵🇭', jv:'🇮🇩', az:'🇦🇿', kk:'🇰🇿', uz:'🇺🇿',
-  };
 
   // Populate all three language selects from the /admin/languages API
   async function loadLanguageOptions() {
@@ -798,16 +970,24 @@
     try {
       const data = await apiFetch('/admin/languages');
       const langs = data.languages || {};
+      // Build sorted flat list once
+      _allLangs = Object.entries(langs)
+        .map(([code]) => {
+          const label  = getLangLabel(code);
+          const search = label.toLowerCase() + ' ' + code;
+          return { code, label, search };
+        })
+        .sort((a, b) => a.label.localeCompare(b.label));
+
       const selectIds = ['s-native_language', 's-ui_language', 's-chat_language'];
       selectIds.forEach(id => {
         const sel = document.getElementById(id);
         if (!sel) return;
         sel.innerHTML = '';
-        Object.entries(langs).sort((a, b) => a[1].localeCompare(b[1])).forEach(([code, name]) => {
-          const flag = _LANG_FLAGS[code] || '🌐';
+        _allLangs.forEach(({ code, label }) => {
           const opt = document.createElement('option');
           opt.value = code;
-          opt.textContent = `${flag} ${name} (${code})`;
+          opt.textContent = label;
           sel.appendChild(opt);
         });
       });

@@ -7,9 +7,10 @@ or as a query parameter:
   ?token=<ADMIN_TOKEN>
 
 After a successful token authentication the client IP is recorded in Redis for
-IP_SESSION_TTL seconds (8 hours).  Subsequent requests from the same IP are
-allowed without re-supplying the token, so the dashboard stays connected after
-a page refresh without asking for the password again.
+IP_SESSION_TTL seconds (30 days).  Subsequent requests from the same IP are
+allowed without re-supplying the token.  When the session is nearing expiry
+the dashboard will display a warning and prompt the admin to re-authenticate
+before the session ends.
 """
 from __future__ import annotations
 
@@ -41,7 +42,7 @@ async def require_admin(
 
     Accepts:
     1. A valid admin token (Bearer header or ?token= query param). On success the
-       client IP receives an 8-hour trusted session so subsequent requests from the
+       client IP receives a 30-day trusted session so subsequent requests from the
        same IP do not need the token.
     2. A request from an IP that already has an active session (no token required).
     """

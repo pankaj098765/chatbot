@@ -89,7 +89,7 @@ async def set_admin_config_bulk(mapping: dict[str, float]) -> None:
 # ─── Admin IP sessions ───────────────────────────────────────────────────────
 
 _IP_SESSION_PREFIX = "admin:session:ip:"
-IP_SESSION_TTL = 8 * 3600  # 8 hours
+IP_SESSION_TTL = 30 * 24 * 3600  # 30 days
 
 
 async def create_ip_session(ip: str, ttl: int = IP_SESSION_TTL) -> None:

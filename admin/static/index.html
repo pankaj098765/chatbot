@@ -441,6 +441,7 @@
       text-align: center;
       color: var(--muted);
       font-size: 0.88rem;
+      grid-column: 1 / -1;
     }
 
     /* ── Language grid ── */
@@ -1025,7 +1026,7 @@
     { code: 'bg',  name: 'Bulgarian',           nativeName: 'Български'           },
     { code: 'ca',  name: 'Catalan',             nativeName: 'Català'              },
     { code: 'ceb', name: 'Cebuano',             nativeName: 'Cebuano'             },
-    { code: 'zh',  name: 'Chinese (Simplified)',nativeName: '中文'                 },
+    { code: 'zh',  name: 'Chinese (Simplified)', nativeName: '中文'                 },
     { code: 'hr',  name: 'Croatian',            nativeName: 'Hrvatski'            },
     { code: 'cs',  name: 'Czech',               nativeName: 'Čeština'             },
     { code: 'da',  name: 'Danish',              nativeName: 'Dansk'               },
@@ -1111,7 +1112,7 @@
     { code: 'ur',  name: 'Urdu',                nativeName: 'اردو',     rtl: true },
     { code: 'uz',  name: 'Uzbek',               nativeName: "O'zbek"              },
     { code: 'vi',  name: 'Vietnamese',          nativeName: 'Tiếng Việt'          },
-    { code: 'xh',  name: 'Xhosa',              nativeName: 'isiXhosa'            },
+    { code: 'xh',  name: 'Xhosa',               nativeName: 'isiXhosa'            },
     { code: 'yo',  name: 'Yoruba',              nativeName: 'Yorùbá'              },
     { code: 'zu',  name: 'Zulu',                nativeName: 'isiZulu'             },
   ].sort((a, b) => a.nativeName.localeCompare(b.nativeName));
@@ -1230,7 +1231,6 @@
       const msg = document.createElement('div');
       msg.className = 'lang-modal-empty';
       msg.textContent = 'No languages found. Try a different search.';
-      msg.setAttribute('style', 'grid-column: 1 / -1;');
       grid.appendChild(msg);
       return;
     }

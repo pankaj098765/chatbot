@@ -339,22 +339,153 @@
       text-align: right;
     }
 
-    /* ── Language picker select ── */
-    .lang-select {
+    /* ── Language picker trigger button ── */
+    .lang-picker-btn {
       width: 100%;
-      margin-top: 6px;
-      border-radius: 8px;
+      margin-top: 8px;
+      padding: 10px 14px;
       background: var(--bg);
-      color: var(--text);
       border: 1px solid var(--border);
+      border-radius: var(--radius);
+      color: var(--text);
       font-size: 0.85rem;
-      padding: 4px;
-      min-height: 130px;
-      outline: none;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      transition: border-color 0.2s, background 0.2s;
+      text-align: left;
     }
-    .lang-select:focus { border-color: var(--accent); }
-    .lang-select option { padding: 5px 8px; cursor: pointer; }
-    .lang-select option:checked { background: #1e3a5f; color: var(--accent); }
+    .lang-picker-btn:hover { border-color: var(--accent); background: #1e2535; }
+    .lang-picker-btn:focus { outline: 2px solid var(--accent); outline-offset: 2px; }
+    .lang-picker-label {
+      flex: 1;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .lang-picker-caret { color: var(--muted); flex-shrink: 0; font-size: 0.7rem; }
+
+    /* ── Language modal overlay ── */
+    .lang-modal-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.72);
+      backdrop-filter: blur(4px);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 1000;
+      padding: 16px;
+    }
+    .lang-modal-box {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      width: 100%;
+      max-width: 700px;
+      max-height: 82vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      box-shadow: 0 30px 70px rgba(0, 0, 0, 0.55);
+      animation: modalIn 0.18s ease;
+    }
+    @keyframes modalIn {
+      from { opacity: 0; transform: translateY(-10px) scale(0.98); }
+      to   { opacity: 1; transform: none; }
+    }
+    .lang-modal-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 20px 24px 0;
+      flex-shrink: 0;
+    }
+    .lang-modal-title { font-size: 1rem; font-weight: 700; }
+    .lang-modal-close {
+      background: none;
+      border: none;
+      color: var(--muted);
+      font-size: 1.1rem;
+      cursor: pointer;
+      padding: 4px 8px;
+      border-radius: 6px;
+      line-height: 1;
+      transition: background 0.15s, color 0.15s;
+    }
+    .lang-modal-close:hover { background: var(--border); color: var(--text); }
+    .lang-modal-close:focus { outline: 2px solid var(--accent); }
+    .lang-modal-search-wrap { padding: 14px 24px 10px; flex-shrink: 0; }
+    .lang-modal-search-input {
+      width: 100%;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      color: var(--text);
+      border-radius: 10px;
+      padding: 10px 14px;
+      font-size: 0.9rem;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+    .lang-modal-search-input:focus { border-color: var(--accent); }
+    .lang-modal-count {
+      padding: 0 24px 8px;
+      font-size: 0.72rem;
+      color: var(--muted);
+      flex-shrink: 0;
+    }
+    .lang-modal-empty {
+      padding: 32px 24px;
+      text-align: center;
+      color: var(--muted);
+      font-size: 0.88rem;
+    }
+
+    /* ── Language grid ── */
+    .lang-modal-grid {
+      flex: 1;
+      overflow-y: auto;
+      padding: 4px 24px 20px;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 7px;
+      align-content: start;
+    }
+    .lang-modal-grid::-webkit-scrollbar { width: 5px; }
+    .lang-modal-grid::-webkit-scrollbar-track { background: transparent; }
+    .lang-modal-grid::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+    .lang-item {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      padding: 10px 13px;
+      border-radius: 10px;
+      border: 1px solid transparent;
+      background: var(--bg);
+      cursor: pointer;
+      text-align: left;
+      transition: background 0.15s, border-color 0.15s, box-shadow 0.15s;
+      font-size: 0.85rem;
+      gap: 2px;
+      line-height: 1.3;
+    }
+    .lang-item:hover { background: #1c2237; border-color: var(--border); }
+    .lang-item:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+    .lang-item.selected {
+      background: #162a48;
+      border-color: var(--accent);
+      box-shadow: 0 0 0 1px var(--accent) inset;
+    }
+    .lang-item[dir="rtl"] { text-align: right; align-items: flex-end; }
+    .lang-item-native { font-weight: 600; color: var(--text); font-size: 0.88rem; }
+    .lang-item-english { color: var(--muted); font-size: 0.74rem; }
+
+    @media (max-width: 600px) {
+      .lang-modal-grid { grid-template-columns: 1fr; }
+      .lang-modal-box  { max-height: 90vh; }
+    }
   </style>
 </head>
 <body>
@@ -499,49 +630,72 @@
     <div class="config-card">
       <div class="cfg-label">
         <span class="cfg-name">Native Language</span>
-        <span class="cfg-value lang-val" id="v-native_language">English (United Kingdom)</span>
+        <span class="cfg-value lang-val" id="v-native_language">—</span>
       </div>
       <div class="cfg-desc">Language used when Mode is "native" or "mixed" (e.g. Hinglish, Spanglish, Franglais).</div>
-      <input type="text" id="native_lang_search" placeholder="🔍 Search language…"
-             style="width:100%;padding:7px 10px;border-radius:8px;background:var(--bg);color:var(--text);border:1px solid var(--border);margin-top:8px;font-size:0.85rem;"
-             oninput="filterLangSelect('s-native_language', this.value)" />
-      <select id="s-native_language" class="lang-select"
-              onchange="syncSelect('native_language', this.value)">
-      </select>
+      <button class="lang-picker-btn" id="btn-native_language"
+              onclick="openLangModal('native_language')"
+              aria-haspopup="dialog" aria-label="Select native language">
+        <span class="lang-picker-label" id="lbl-native_language">Click to select…</span>
+        <span class="lang-picker-caret">▾</span>
+      </button>
     </div>
 
     <div class="config-card">
       <div class="cfg-label">
         <span class="cfg-name">UI Language</span>
-        <span class="cfg-value lang-val" id="v-ui_language">English (United Kingdom)</span>
+        <span class="cfg-value lang-val" id="v-ui_language">—</span>
       </div>
       <div class="cfg-desc">Language for buttons and menus. Can differ from the AI chat language.</div>
-      <input type="text" id="ui_lang_search" placeholder="🔍 Search language…"
-             style="width:100%;padding:7px 10px;border-radius:8px;background:var(--bg);color:var(--text);border:1px solid var(--border);margin-top:8px;font-size:0.85rem;"
-             oninput="filterLangSelect('s-ui_language', this.value)" />
-      <select id="s-ui_language" class="lang-select"
-              onchange="syncSelect('ui_language', this.value)">
-      </select>
+      <button class="lang-picker-btn" id="btn-ui_language"
+              onclick="openLangModal('ui_language')"
+              aria-haspopup="dialog" aria-label="Select UI language">
+        <span class="lang-picker-label" id="lbl-ui_language">Click to select…</span>
+        <span class="lang-picker-caret">▾</span>
+      </button>
     </div>
 
     <div class="config-card">
       <div class="cfg-label">
         <span class="cfg-name">Chat Language (AI)</span>
-        <span class="cfg-value lang-val" id="v-chat_language">English (United Kingdom)</span>
+        <span class="cfg-value lang-val" id="v-chat_language">—</span>
       </div>
       <div class="cfg-desc">Language the AI uses for responses. Independent of UI language.</div>
-      <input type="text" id="chat_lang_search" placeholder="🔍 Search language…"
-             style="width:100%;padding:7px 10px;border-radius:8px;background:var(--bg);color:var(--text);border:1px solid var(--border);margin-top:8px;font-size:0.85rem;"
-             oninput="filterLangSelect('s-chat_language', this.value)" />
-      <select id="s-chat_language" class="lang-select"
-              onchange="syncSelect('chat_language', this.value)">
-      </select>
+      <button class="lang-picker-btn" id="btn-chat_language"
+              onclick="openLangModal('chat_language')"
+              aria-haspopup="dialog" aria-label="Select AI chat language">
+        <span class="lang-picker-label" id="lbl-chat_language">Click to select…</span>
+        <span class="lang-picker-caret">▾</span>
+      </button>
     </div>
 
   </div>
 
   <button class="apply-btn" id="applyBtn" onclick="applyConfig()">Apply Configuration</button>
 </main>
+
+<!-- ── Global Language Selector Modal ── -->
+<div id="langModal" class="lang-modal-overlay"
+     role="dialog" aria-modal="true"
+     aria-labelledby="langModalTitle">
+  <div class="lang-modal-box">
+    <div class="lang-modal-header">
+      <h2 id="langModalTitle" class="lang-modal-title">Select Language</h2>
+      <button class="lang-modal-close" id="langModalClose"
+              aria-label="Close language selector">✕</button>
+    </div>
+    <div class="lang-modal-search-wrap">
+      <input type="search" id="langModalSearch" class="lang-modal-search-input"
+             placeholder="🔍 Search by name or native name…"
+             aria-label="Search languages"
+             autocomplete="off" />
+    </div>
+    <div id="langModalCount" class="lang-modal-count"></div>
+    <div id="langModalGrid" class="lang-modal-grid"
+         role="listbox" aria-label="Language options">
+    </div>
+  </div>
+</div>
 
 <div id="toast"></div>
 
@@ -795,11 +949,9 @@
     ['native_language', 'ui_language', 'chat_language'].forEach(key => {
       const val = cfg[key];
       if (!val) return;
-      const sel = document.getElementById('s-' + key);
-      if (sel) sel.value = val;
-      const lbl = document.getElementById('v-' + key);
-      if (lbl) lbl.textContent = getLangLabel(val);
+      applyLangToUI(key, val);
       configDraft[key] = val;
+      saveLangDraft(key, val);
     });
   }
 
@@ -848,151 +1000,322 @@
 
   // UPDATED: sync select (dropdown) config fields
   function syncSelect(key, val) {
-    const lbl = document.getElementById('v-' + key);
-    if (lbl) {
-      // For language fields show the full human-readable label; for other selects show the raw value
-      const langKeys = ['native_language', 'ui_language', 'chat_language'];
-      lbl.textContent = langKeys.includes(key) ? getLangLabel(val) : val;
+    const langKeys = ['native_language', 'ui_language', 'chat_language'];
+    if (!langKeys.includes(key)) {
+      // Non-language select: update compact label with raw value
+      const lbl = document.getElementById('v-' + key);
+      if (lbl) lbl.textContent = val;
     }
     configDraft[key] = val;
   }
 
-  // ── Language metadata ─────────────────────────────────────────────────────────
-  // Per-language: flag emoji, English name, and primary country for display.
-  const _LANG_META = {
-    en:  { flag: '🇬🇧', name: 'English',      country: 'United Kingdom' },
-    hi:  { flag: '🇮🇳', name: 'Hindi',         country: 'India' },
-    es:  { flag: '🇪🇸', name: 'Spanish',       country: 'Spain' },
-    fr:  { flag: '🇫🇷', name: 'French',        country: 'France' },
-    de:  { flag: '🇩🇪', name: 'German',        country: 'Germany' },
-    pt:  { flag: '🇧🇷', name: 'Portuguese',    country: 'Brazil' },
-    ar:  { flag: '🇸🇦', name: 'Arabic',        country: 'Saudi Arabia' },
-    ru:  { flag: '🇷🇺', name: 'Russian',       country: 'Russia' },
-    tr:  { flag: '🇹🇷', name: 'Turkish',       country: 'Turkey' },
-    id:  { flag: '🇮🇩', name: 'Indonesian',    country: 'Indonesia' },
-    zh:  { flag: '🇨🇳', name: 'Chinese',       country: 'China' },
-    ja:  { flag: '🇯🇵', name: 'Japanese',      country: 'Japan' },
-    ko:  { flag: '🇰🇷', name: 'Korean',        country: 'South Korea' },
-    bn:  { flag: '🇧🇩', name: 'Bengali',       country: 'Bangladesh' },
-    ur:  { flag: '🇵🇰', name: 'Urdu',          country: 'Pakistan' },
-    vi:  { flag: '🇻🇳', name: 'Vietnamese',    country: 'Vietnam' },
-    th:  { flag: '🇹🇭', name: 'Thai',          country: 'Thailand' },
-    fa:  { flag: '🇮🇷', name: 'Persian',       country: 'Iran' },
-    ms:  { flag: '🇲🇾', name: 'Malay',         country: 'Malaysia' },
-    ta:  { flag: '🇮🇳', name: 'Tamil',         country: 'India' },
-    te:  { flag: '🇮🇳', name: 'Telugu',        country: 'India' },
-    mr:  { flag: '🇮🇳', name: 'Marathi',       country: 'India' },
-    gu:  { flag: '🇮🇳', name: 'Gujarati',      country: 'India' },
-    pa:  { flag: '🇮🇳', name: 'Punjabi',       country: 'India' },
-    kn:  { flag: '🇮🇳', name: 'Kannada',       country: 'India' },
-    ml:  { flag: '🇮🇳', name: 'Malayalam',     country: 'India' },
-    si:  { flag: '🇱🇰', name: 'Sinhala',       country: 'Sri Lanka' },
-    my:  { flag: '🇲🇲', name: 'Burmese',       country: 'Myanmar' },
-    km:  { flag: '🇰🇭', name: 'Khmer',         country: 'Cambodia' },
-    lo:  { flag: '🇱🇦', name: 'Lao',           country: 'Laos' },
-    ne:  { flag: '🇳🇵', name: 'Nepali',        country: 'Nepal' },
-    it:  { flag: '🇮🇹', name: 'Italian',       country: 'Italy' },
-    nl:  { flag: '🇳🇱', name: 'Dutch',         country: 'Netherlands' },
-    pl:  { flag: '🇵🇱', name: 'Polish',        country: 'Poland' },
-    uk:  { flag: '🇺🇦', name: 'Ukrainian',     country: 'Ukraine' },
-    sv:  { flag: '🇸🇪', name: 'Swedish',       country: 'Sweden' },
-    ro:  { flag: '🇷🇴', name: 'Romanian',      country: 'Romania' },
-    cs:  { flag: '🇨🇿', name: 'Czech',         country: 'Czech Republic' },
-    el:  { flag: '🇬🇷', name: 'Greek',         country: 'Greece' },
-    hu:  { flag: '🇭🇺', name: 'Hungarian',     country: 'Hungary' },
-    da:  { flag: '🇩🇰', name: 'Danish',        country: 'Denmark' },
-    fi:  { flag: '🇫🇮', name: 'Finnish',       country: 'Finland' },
-    sk:  { flag: '🇸🇰', name: 'Slovak',        country: 'Slovakia' },
-    bg:  { flag: '🇧🇬', name: 'Bulgarian',     country: 'Bulgaria' },
-    hr:  { flag: '🇭🇷', name: 'Croatian',      country: 'Croatia' },
-    sr:  { flag: '🇷🇸', name: 'Serbian',       country: 'Serbia' },
-    lt:  { flag: '🇱🇹', name: 'Lithuanian',    country: 'Lithuania' },
-    lv:  { flag: '🇱🇻', name: 'Latvian',       country: 'Latvia' },
-    et:  { flag: '🇪🇪', name: 'Estonian',      country: 'Estonia' },
-    sl:  { flag: '🇸🇮', name: 'Slovenian',     country: 'Slovenia' },
-    no:  { flag: '🇳🇴', name: 'Norwegian',     country: 'Norway' },
-    ca:  { flag: '🇪🇸', name: 'Catalan',       country: 'Spain (Catalonia)' },
-    sw:  { flag: '🇰🇪', name: 'Swahili',       country: 'Kenya' },
-    am:  { flag: '🇪🇹', name: 'Amharic',       country: 'Ethiopia' },
-    ha:  { flag: '🇳🇬', name: 'Hausa',         country: 'Nigeria' },
-    yo:  { flag: '🇳🇬', name: 'Yoruba',        country: 'Nigeria' },
-    ig:  { flag: '🇳🇬', name: 'Igbo',          country: 'Nigeria' },
-    zu:  { flag: '🇿🇦', name: 'Zulu',          country: 'South Africa' },
-    af:  { flag: '🇿🇦', name: 'Afrikaans',     country: 'South Africa' },
-    he:  { flag: '🇮🇱', name: 'Hebrew',        country: 'Israel' },
-    tl:  { flag: '🇵🇭', name: 'Filipino',      country: 'Philippines' },
-    jv:  { flag: '🇮🇩', name: 'Javanese',      country: 'Indonesia' },
-    az:  { flag: '🇦🇿', name: 'Azerbaijani',   country: 'Azerbaijan' },
-    kk:  { flag: '🇰🇿', name: 'Kazakh',        country: 'Kazakhstan' },
-    uz:  { flag: '🇺🇿', name: 'Uzbek',         country: 'Uzbekistan' },
-  };
+  // ── Language data ─────────────────────────────────────────────────────────────
+  // Each entry: { code, name (English), nativeName (local script), rtl? }
+  // Covers one language per country + top-50 world languages.
+  const LANGUAGES = [
+    { code: 'af',  name: 'Afrikaans',          nativeName: 'Afrikaans'           },
+    { code: 'sq',  name: 'Albanian',            nativeName: 'Shqip'               },
+    { code: 'am',  name: 'Amharic',             nativeName: 'አማርኛ'               },
+    { code: 'ar',  name: 'Arabic',              nativeName: 'العربية',  rtl: true },
+    { code: 'hy',  name: 'Armenian',            nativeName: 'Հայերեն'             },
+    { code: 'az',  name: 'Azerbaijani',         nativeName: 'Azərbaycan'          },
+    { code: 'be',  name: 'Belarusian',          nativeName: 'Беларуская'          },
+    { code: 'bn',  name: 'Bengali',             nativeName: 'বাংলা'               },
+    { code: 'bs',  name: 'Bosnian',             nativeName: 'Bosanski'            },
+    { code: 'bg',  name: 'Bulgarian',           nativeName: 'Български'           },
+    { code: 'ca',  name: 'Catalan',             nativeName: 'Català'              },
+    { code: 'ceb', name: 'Cebuano',             nativeName: 'Cebuano'             },
+    { code: 'zh',  name: 'Chinese (Simplified)',nativeName: '中文'                 },
+    { code: 'hr',  name: 'Croatian',            nativeName: 'Hrvatski'            },
+    { code: 'cs',  name: 'Czech',               nativeName: 'Čeština'             },
+    { code: 'da',  name: 'Danish',              nativeName: 'Dansk'               },
+    { code: 'dv',  name: 'Dhivehi',             nativeName: 'ދިވެހި',   rtl: true },
+    { code: 'nl',  name: 'Dutch',               nativeName: 'Nederlands'          },
+    { code: 'dz',  name: 'Dzongkha',            nativeName: 'རྫོང་ཁ'              },
+    { code: 'en',  name: 'English',             nativeName: 'English'             },
+    { code: 'et',  name: 'Estonian',            nativeName: 'Eesti'               },
+    { code: 'fa',  name: 'Persian',             nativeName: 'فارسی',    rtl: true },
+    { code: 'fj',  name: 'Fijian',              nativeName: 'Vosa Vakaviti'       },
+    { code: 'fi',  name: 'Finnish',             nativeName: 'Suomi'               },
+    { code: 'fr',  name: 'French',              nativeName: 'Français'            },
+    { code: 'ka',  name: 'Georgian',            nativeName: 'ქართული'             },
+    { code: 'de',  name: 'German',              nativeName: 'Deutsch'             },
+    { code: 'el',  name: 'Greek',               nativeName: 'Ελληνικά'            },
+    { code: 'gn',  name: 'Guaraní',             nativeName: "Avañe'ẽ"             },
+    { code: 'gu',  name: 'Gujarati',            nativeName: 'ગુજરાતી'             },
+    { code: 'ht',  name: 'Haitian Creole',      nativeName: 'Kreyòl ayisyen'      },
+    { code: 'ha',  name: 'Hausa',               nativeName: 'Hausa'               },
+    { code: 'he',  name: 'Hebrew',              nativeName: 'עברית',    rtl: true },
+    { code: 'hi',  name: 'Hindi',               nativeName: 'हिंदी'               },
+    { code: 'hu',  name: 'Hungarian',           nativeName: 'Magyar'              },
+    { code: 'is',  name: 'Icelandic',           nativeName: 'Íslenska'            },
+    { code: 'ig',  name: 'Igbo',                nativeName: 'Igbo'                },
+    { code: 'id',  name: 'Indonesian',          nativeName: 'Bahasa Indonesia'    },
+    { code: 'ga',  name: 'Irish',               nativeName: 'Gaeilge'             },
+    { code: 'it',  name: 'Italian',             nativeName: 'Italiano'            },
+    { code: 'ja',  name: 'Japanese',            nativeName: '日本語'               },
+    { code: 'jv',  name: 'Javanese',            nativeName: 'Basa Jawa'           },
+    { code: 'kn',  name: 'Kannada',             nativeName: 'ಕನ್ನಡ'               },
+    { code: 'kk',  name: 'Kazakh',              nativeName: 'Қазақ'               },
+    { code: 'km',  name: 'Khmer',               nativeName: 'ភាសាខ្មែរ'            },
+    { code: 'rw',  name: 'Kinyarwanda',         nativeName: 'Kinyarwanda'         },
+    { code: 'ko',  name: 'Korean',              nativeName: '한국어'               },
+    { code: 'ky',  name: 'Kyrgyz',              nativeName: 'Кыргызча'            },
+    { code: 'lo',  name: 'Lao',                 nativeName: 'ພາສາລາວ'             },
+    { code: 'lv',  name: 'Latvian',             nativeName: 'Latviešu'            },
+    { code: 'lt',  name: 'Lithuanian',          nativeName: 'Lietuvių'            },
+    { code: 'lb',  name: 'Luxembourgish',       nativeName: 'Lëtzebuergesch'      },
+    { code: 'mk',  name: 'Macedonian',          nativeName: 'Македонски'          },
+    { code: 'mg',  name: 'Malagasy',            nativeName: 'Malagasy'            },
+    { code: 'ms',  name: 'Malay',               nativeName: 'Bahasa Melayu'       },
+    { code: 'ml',  name: 'Malayalam',           nativeName: 'മലയാളം'              },
+    { code: 'mt',  name: 'Maltese',             nativeName: 'Malti'               },
+    { code: 'mi',  name: 'Māori',               nativeName: 'Te Reo Māori'        },
+    { code: 'mr',  name: 'Marathi',             nativeName: 'मराठी'               },
+    { code: 'mn',  name: 'Mongolian',           nativeName: 'Монгол'              },
+    { code: 'my',  name: 'Burmese',             nativeName: 'မြန်မာဘာသာ'          },
+    { code: 'ne',  name: 'Nepali',              nativeName: 'नेपाली'              },
+    { code: 'no',  name: 'Norwegian',           nativeName: 'Norsk'               },
+    { code: 'ny',  name: 'Chichewa',            nativeName: 'Chichewa'            },
+    { code: 'or',  name: 'Odia',                nativeName: 'ଓଡ଼ିଆ'               },
+    { code: 'ps',  name: 'Pashto',              nativeName: 'پښتو',     rtl: true },
+    { code: 'pa',  name: 'Punjabi',             nativeName: 'ਪੰਜਾਬੀ'              },
+    { code: 'pl',  name: 'Polish',              nativeName: 'Polski'              },
+    { code: 'pt',  name: 'Portuguese',          nativeName: 'Português'           },
+    { code: 'ro',  name: 'Romanian',            nativeName: 'Română'              },
+    { code: 'rn',  name: 'Rundi',               nativeName: 'Kirundi'             },
+    { code: 'ru',  name: 'Russian',             nativeName: 'Русский'             },
+    { code: 'sm',  name: 'Samoan',              nativeName: 'Gagana Sāmoa'        },
+    { code: 'sd',  name: 'Sindhi',              nativeName: 'سنڌي',     rtl: true },
+    { code: 'si',  name: 'Sinhala',             nativeName: 'සිංහල'               },
+    { code: 'sk',  name: 'Slovak',              nativeName: 'Slovenčina'          },
+    { code: 'sl',  name: 'Slovenian',           nativeName: 'Slovenščina'         },
+    { code: 'so',  name: 'Somali',              nativeName: 'Soomaali'            },
+    { code: 'sr',  name: 'Serbian',             nativeName: 'Српски'              },
+    { code: 'st',  name: 'Sesotho',             nativeName: 'Sesotho'             },
+    { code: 'es',  name: 'Spanish',             nativeName: 'Español'             },
+    { code: 'ss',  name: 'Swati',               nativeName: 'SiSwati'             },
+    { code: 'sw',  name: 'Swahili',             nativeName: 'Kiswahili'           },
+    { code: 'sv',  name: 'Swedish',             nativeName: 'Svenska'             },
+    { code: 'tg',  name: 'Tajik',               nativeName: 'Тоҷикӣ'              },
+    { code: 'ta',  name: 'Tamil',               nativeName: 'தமிழ்'               },
+    { code: 'te',  name: 'Telugu',              nativeName: 'తెలుగు'              },
+    { code: 'th',  name: 'Thai',                nativeName: 'ภาษาไทย'             },
+    { code: 'ti',  name: 'Tigrinya',            nativeName: 'ትግርኛ'               },
+    { code: 'tl',  name: 'Filipino',            nativeName: 'Filipino'            },
+    { code: 'tn',  name: 'Tswana',              nativeName: 'Setswana'            },
+    { code: 'to',  name: 'Tongan',              nativeName: 'Lea Faka-Tonga'      },
+    { code: 'tr',  name: 'Turkish',             nativeName: 'Türkçe'              },
+    { code: 'tk',  name: 'Turkmen',             nativeName: 'Türkmen'             },
+    { code: 'uk',  name: 'Ukrainian',           nativeName: 'Українська'          },
+    { code: 'ur',  name: 'Urdu',                nativeName: 'اردو',     rtl: true },
+    { code: 'uz',  name: 'Uzbek',               nativeName: "O'zbek"              },
+    { code: 'vi',  name: 'Vietnamese',          nativeName: 'Tiếng Việt'          },
+    { code: 'xh',  name: 'Xhosa',              nativeName: 'isiXhosa'            },
+    { code: 'yo',  name: 'Yoruba',              nativeName: 'Yorùbá'              },
+    { code: 'zu',  name: 'Zulu',                nativeName: 'isiZulu'             },
+  ].sort((a, b) => a.nativeName.localeCompare(b.nativeName));
 
-  // Cached flat list of languages populated by loadLanguageOptions()
-  let _allLangs = [];  // [{code, label, search}]
-
-  // Return the human-readable display string for a given ISO code, e.g.:
-  //   getLangLabel('en') → '🇬🇧 English (United Kingdom)'
+  // Return "NativeName (EnglishName)" display string for a code
   function getLangLabel(code) {
-    const m = _LANG_META[code];
-    if (m) return `${m.flag} ${m.name} (${m.country})`;
-    // Fallback for unknown codes: just show the code in uppercase
-    return `🌐 ${code.toUpperCase()}`;
+    const lang = LANGUAGES.find(l => l.code === code);
+    if (lang) return `${lang.nativeName} (${lang.name})`;
+    return code ? code.toUpperCase() : '—';
   }
 
-  // ── Language dropdown helpers ─────────────────────────────────────────────────
+  // ── Modal state ───────────────────────────────────────────────────────────────
+  let _modalKey = null;       // which config key is being edited
+  let _filteredLangs = [];    // languages currently shown in grid
 
-  // Rebuild a language <select> from _allLangs, putting items matching `query` first.
-  function filterLangSelect(selectId, query) {
-    const sel = document.getElementById(selectId);
-    if (!sel || !_allLangs.length) return;
-    const q = query.trim().toLowerCase();
-    const current = sel.value;
-    // Partition into matching (top) and rest (bottom)
-    const matches = q ? _allLangs.filter(l => l.search.includes(q)) : [];
-    const rest    = q ? _allLangs.filter(l => !l.search.includes(q)) : _allLangs;
-    sel.innerHTML = '';
-    const addOpt = (l) => {
-      const opt = document.createElement('option');
-      opt.value = l.code;
-      opt.textContent = l.label;
-      sel.appendChild(opt);
-    };
-    matches.forEach(addOpt);
-    rest.forEach(addOpt);
-    // Restore selection if still in list, else select top match
-    if (current) sel.value = current;
-    if (q && matches.length) sel.value = matches[0].code;
-  }
+  // ── LocalStorage helpers for language draft ───────────────────────────────────
+  const LS_LANG_DRAFT = 'admin_lang_draft';
 
-  // Populate all three language selects from the /admin/languages API
-  async function loadLanguageOptions() {
-    if (!adminToken && !usingIpSession) return;
+  function saveLangDraft(key, code) {
     try {
-      const data = await apiFetch('/admin/languages');
-      const langs = data.languages || {};
-      // Build sorted flat list once
-      _allLangs = Object.entries(langs)
-        .map(([code]) => {
-          const label  = getLangLabel(code);
-          const search = label.toLowerCase() + ' ' + code;
-          return { code, label, search };
-        })
-        .sort((a, b) => a.label.localeCompare(b.label));
-
-      const selectIds = ['s-native_language', 's-ui_language', 's-chat_language'];
-      selectIds.forEach(id => {
-        const sel = document.getElementById(id);
-        if (!sel) return;
-        sel.innerHTML = '';
-        _allLangs.forEach(({ code, label }) => {
-          const opt = document.createElement('option');
-          opt.value = code;
-          opt.textContent = label;
-          sel.appendChild(opt);
-        });
-      });
+      const obj = JSON.parse(localStorage.getItem(LS_LANG_DRAFT) || '{}');
+      obj[key] = code;
+      localStorage.setItem(LS_LANG_DRAFT, JSON.stringify(obj));
     } catch (_) {}
   }
+
+  function loadLangDraft() {
+    try { return JSON.parse(localStorage.getItem(LS_LANG_DRAFT) || '{}'); } catch (_) {}
+    return {};
+  }
+
+  // ── Update lang picker button + compact label ─────────────────────────────────
+  function applyLangToUI(key, code) {
+    const lang = LANGUAGES.find(l => l.code === code);
+    if (!lang) return;
+    const display = `${lang.nativeName} (${lang.name})`;
+    const lbl = document.getElementById('lbl-' + key);
+    if (lbl) {
+      lbl.textContent = display;
+      if (lang.rtl) lbl.setAttribute('dir', 'rtl');
+      else lbl.removeAttribute('dir');
+    }
+    const cfgVal = document.getElementById('v-' + key);
+    if (cfgVal) cfgVal.textContent = display;
+  }
+
+  // ── Populate all three language pickers on connect ────────────────────────────
+  function loadLanguageOptions() {
+    // Apply any language selections saved in localStorage immediately
+    // (prevents white screen on refresh before API responds)
+    const draft = loadLangDraft();
+    ['native_language', 'ui_language', 'chat_language'].forEach(key => {
+      const code = draft[key];
+      if (code) {
+        applyLangToUI(key, code);
+        configDraft[key] = code;
+      }
+    });
+  }
+
+  // ── Modal: open ───────────────────────────────────────────────────────────────
+  function openLangModal(key) {
+    _modalKey = key;
+    const titles = {
+      native_language: 'Select Native Language',
+      ui_language:     'Select UI Language',
+      chat_language:   'Select Chat Language (AI)',
+    };
+    document.getElementById('langModalTitle').textContent =
+      titles[key] || 'Select Language';
+
+    const searchEl = document.getElementById('langModalSearch');
+    searchEl.value = '';
+    renderLangGrid('');
+
+    const modal = document.getElementById('langModal');
+    modal.style.display = 'flex';
+    document.body.style.overflow = 'hidden';
+    setTimeout(() => searchEl.focus(), 60);
+  }
+
+  // ── Modal: close ──────────────────────────────────────────────────────────────
+  function closeLangModal() {
+    const modal = document.getElementById('langModal');
+    modal.style.display = 'none';
+    document.body.style.overflow = '';
+    // Return focus to trigger button
+    const btn = _modalKey ? document.getElementById('btn-' + _modalKey) : null;
+    _modalKey = null;
+    if (btn) btn.focus();
+  }
+
+  // ── Modal: render grid ────────────────────────────────────────────────────────
+  function renderLangGrid(query) {
+    const grid    = document.getElementById('langModalGrid');
+    const countEl = document.getElementById('langModalCount');
+    const q = query.trim().toLowerCase();
+    const currentCode = _modalKey ? (configDraft[_modalKey] || '') : '';
+
+    _filteredLangs = q
+      ? LANGUAGES.filter(l =>
+          l.nativeName.toLowerCase().includes(q) ||
+          l.name.toLowerCase().includes(q) ||
+          l.code.toLowerCase() === q)
+      : [...LANGUAGES];
+
+    if (countEl) {
+      countEl.textContent = q
+        ? `${_filteredLangs.length} result${_filteredLangs.length !== 1 ? 's' : ''}`
+        : `${LANGUAGES.length} languages`;
+    }
+
+    grid.innerHTML = '';
+
+    if (_filteredLangs.length === 0) {
+      const msg = document.createElement('div');
+      msg.className = 'lang-modal-empty';
+      msg.textContent = 'No languages found. Try a different search.';
+      msg.setAttribute('style', 'grid-column: 1 / -1;');
+      grid.appendChild(msg);
+      return;
+    }
+
+    _filteredLangs.forEach((lang, idx) => {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'lang-item' + (lang.code === currentCode ? ' selected' : '');
+      if (lang.rtl) btn.setAttribute('dir', 'rtl');
+      btn.setAttribute('role', 'option');
+      btn.setAttribute('aria-selected', lang.code === currentCode ? 'true' : 'false');
+      btn.setAttribute('data-idx', idx);
+      btn.setAttribute('data-code', lang.code);
+      btn.innerHTML =
+        `<span class="lang-item-native">${lang.nativeName}</span>` +
+        `<span class="lang-item-english">${lang.name}</span>`;
+      btn.addEventListener('click', () => selectLang(lang.code));
+      btn.addEventListener('keydown', onLangItemKey);
+      grid.appendChild(btn);
+    });
+  }
+
+  // ── Modal: select a language ──────────────────────────────────────────────────
+  function selectLang(code) {
+    if (!_modalKey) return;
+    const key = _modalKey;
+    syncSelect(key, code);
+    applyLangToUI(key, code);
+    saveLangDraft(key, code);
+    closeLangModal();
+  }
+
+  // ── Modal: keyboard navigation ────────────────────────────────────────────────
+  function onLangItemKey(e) {
+    const idx = parseInt(e.target.getAttribute('data-idx'), 10);
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      selectLang(e.target.getAttribute('data-code'));
+    } else if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      const next = document.querySelector(`.lang-item[data-idx="${idx + 1}"]`);
+      if (next) next.focus();
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      if (idx > 0) {
+        const prev = document.querySelector(`.lang-item[data-idx="${idx - 1}"]`);
+        if (prev) prev.focus();
+      } else {
+        document.getElementById('langModalSearch').focus();
+      }
+    } else if (e.key === 'Escape') {
+      closeLangModal();
+    }
+  }
+
+  // Wire up modal search, close button, and backdrop click after DOM is ready
+  document.addEventListener('DOMContentLoaded', () => {
+    const searchEl = document.getElementById('langModalSearch');
+    if (searchEl) {
+      searchEl.addEventListener('input', () => renderLangGrid(searchEl.value));
+      searchEl.addEventListener('keydown', (e) => {
+        if (e.key === 'ArrowDown') {
+          e.preventDefault();
+          const first = document.querySelector('.lang-item[data-idx="0"]');
+          if (first) first.focus();
+        } else if (e.key === 'Escape') {
+          closeLangModal();
+        }
+      });
+    }
+    const closeBtn = document.getElementById('langModalClose');
+    if (closeBtn) closeBtn.addEventListener('click', closeLangModal);
+
+    const modal = document.getElementById('langModal');
+    if (modal) {
+      modal.addEventListener('click', (e) => { if (e.target === modal) closeLangModal(); });
+    }
+    // Global Escape key closes modal
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') {
+        const m = document.getElementById('langModal');
+        if (m && m.style.display !== 'none') closeLangModal();
+      }
+    });
+  });
 
   // ── Apply config ──────────────────────────────────────────────────────────────
   async function applyConfig() {

@@ -44,12 +44,29 @@ def sponsor_line(name: str, link: str) -> str:
     The block is designed to look elegant inside Telegram messages —
     it uses a subtle divider and an inline hyperlink so the sponsor
     notice attracts attention without feeling intrusive.
+
+    *name* is HTML-escaped to prevent injection.  *link* is validated
+    to start with ``http://`` or ``https://``; if it does not, the
+    sponsor block is suppressed entirely.
     """
     if not name or not link:
         return ""
+    # Only allow safe http/https URLs — silently suppress anything else
+    # to avoid injecting javascript: or other dangerous schemes.
+    if not (link.startswith("https://") or link.startswith("http://")):
+        return ""
+    # Escape HTML special characters in the display name so that a name
+    # containing < > & " does not break the message or allow injection.
+    safe_name = (
+        name
+        .replace("&", "&amp;")
+        .replace("<", "&lt;")
+        .replace(">", "&gt;")
+        .replace('"', "&quot;")
+    )
     return (
         "\n\n"
         "┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄\n"
-        f"✨ <b>Sponsored by</b>  <a href=\"{link}\">{name}</a>\n"
+        f"✨ <b>Sponsored by</b> <a href=\"{link}\">{safe_name}</a>\n"
         "┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄"
     )

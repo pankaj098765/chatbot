@@ -38,12 +38,13 @@ from aiogram import Bot
 from aiogram.enums import ChatAction
 
 from bot.ai.behavior import BehaviorController
+from bot.config import settings
 from bot.ai.personas import PERSONAS
 from bot.database import mongodb as db
 from bot.database import redis_client as redis
 from bot.i18n import get_ui_lang, t
 from bot.services import admin_control
-from bot.utils.helpers import generate_session_id
+from bot.utils.helpers import generate_session_id, sponsor_line
 
 logger = logging.getLogger(__name__)
 
@@ -52,17 +53,6 @@ _FALLBACK_PARTNER_ID = -1
 
 # Feature 5: Minimum session duration (seconds) for a first-session user
 _FIRST_SESSION_MIN_DURATION = 180.0
-
-# Minimum silence (seconds) before AI proactively starts a topic when the
-# user hasn't sent anything.  Only one message is sent; the AI then waits
-# again rather than flooding the chat.
-_TOPIC_START_SILENCE_THRESHOLD = 90.0
-
-# Cue text injected into the LLM prompt when the bot needs to send a
-# proactive topic-starter (no recent user message).  This is never shown to
-# the user; it only guides the LLM to produce an opener.
-_PROACTIVE_MESSAGE_CUE = "(start a new topic or say something interesting)"
-
 
 # ─── Persona selection ────────────────────────────────────────────────────────
 
@@ -254,11 +244,6 @@ async def start_fallback_session(bot: Bot, user_id: int) -> None:
         await redis.clear_session(user_id)
         return
 
-    # Track the last time the AI sent a message so we can gate proactive
-    # topic-starters: the AI will only start a topic unprompted if the user
-    # has been silent for longer than _TOPIC_START_SILENCE_THRESHOLD seconds.
-    last_sent_time = time.time()
-
     # Main response loop
     while True:
         # ── Session liveness check ────────────────────────────────────────
@@ -287,30 +272,13 @@ async def start_fallback_session(bot: Bot, user_id: int) -> None:
             if last_user_msg:
                 await redis.clear_fallback_user_message(user_id)
             else:
-                # User has not sent anything since the last AI message.
-                # Only send a proactive topic-starter if the silence has
-                # exceeded the threshold, and send at most one message so
-                # the chat doesn't look like a monologue.
-                silence = time.time() - last_sent_time
-                if silence < _TOPIC_START_SILENCE_THRESHOLD:
-                    continue  # wait for the user to reply
+                # User has not replied yet — keep only the initial greeting.
+                continue
 
-            # For proactive messages (no user reply yet) pass a natural cue so
-            # the LLM generates an opener rather than receiving an empty prompt.
-            effective_msg = last_user_msg or _PROACTIVE_MESSAGE_CUE
-
-            messages = await controller.generate_response_async(
-                user_message=effective_msg,
-                is_proactive=not last_user_msg,
-            )
+            messages = await controller.generate_response_async(user_message=last_user_msg)
             # generate_response_async() may return an empty list (question-ignore)
             if not messages:
                 continue
-
-            # When sending a proactive topic-starter (no user message), limit
-            # to one message to avoid flooding the chat with unsolicited texts.
-            if not last_user_msg:
-                messages = messages[:1]
 
             for i, msg in enumerate(messages):
                 if i > 0:
@@ -318,7 +286,6 @@ async def start_fallback_session(bot: Bot, user_id: int) -> None:
                     await asyncio.sleep(controller.get_burst_delay())
                 await _send_with_typing(bot, user_id, msg)
                 message_count += 1
-            last_sent_time = time.time()
         except Exception as exc:
             logger.warning(
                 "Fallback session: error in response loop for user_id=%d: %s",
@@ -338,7 +305,8 @@ async def start_fallback_session(bot: Bot, user_id: int) -> None:
             await _send_with_typing(bot, user_id, exit_msg)
         await bot.send_message(
             user_id,
-            t("partner_disconnected", lang),
+            t("partner_disconnected", lang) + sponsor_line(settings.sponsor_name, settings.sponsor_link),
+            parse_mode="HTML",
         )
     except Exception as exc:
         logger.warning("Fallback session: failed to send exit message to user_id=%d: %s", user_id, exc)
@@ -349,4 +317,3 @@ async def start_fallback_session(bot: Bot, user_id: int) -> None:
 def launch_fallback(bot: Bot, user_id: int) -> None:
     """Schedule the fallback session as a background asyncio task."""
     asyncio.create_task(start_fallback_session(bot, user_id))
-

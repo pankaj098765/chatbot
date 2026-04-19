@@ -30,7 +30,6 @@ Multilingual: Reads user's chat_language + chat_mode and passes them to
 from __future__ import annotations
 
 import asyncio
-import html
 import logging
 import random
 import time
@@ -298,8 +297,8 @@ async def start_fallback_session(bot: Bot, user_id: int) -> None:
                 # User is silent.  Send at most ONE proactive topic-starter per
                 # silence window; stop sending once the flag is set.
                 if not proactive_sent:
-                    silence_since = time.time() - (last_user_reply_time or start_time)
-                    if silence_since >= _TOPIC_START_SILENCE_THRESHOLD:
+                    silence_duration = time.time() - (last_user_reply_time or start_time)
+                    if silence_duration >= _TOPIC_START_SILENCE_THRESHOLD:
                         topic_msgs = await controller.generate_response_async(
                             user_message=_PROACTIVE_MESSAGE_CUE,
                             is_proactive=True,
@@ -343,7 +342,7 @@ async def start_fallback_session(bot: Bot, user_id: int) -> None:
         sponsor = sponsor_line(settings.sponsor_name, settings.sponsor_link)
         await bot.send_message(
             user_id,
-            html.escape(t("partner_disconnected", lang)) + sponsor,
+            t("partner_disconnected", lang) + sponsor,
             parse_mode="HTML",
         )
     except Exception as exc:

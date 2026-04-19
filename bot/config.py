@@ -100,6 +100,12 @@ class Settings:
     # auto-populated for all built-in providers).
     llm_base_url: str = ""
 
+    # Sponsor branding — shown as a subtle line on every disconnect message.
+    # Set both SPONSOR_NAME and SPONSOR_LINK in .env; leave either empty to
+    # disable the sponsor line without touching any other code.
+    sponsor_name: str = ""
+    sponsor_link: str = ""
+
 
 # ─── Key-format fingerprints ─────────────────────────────────────────────────
 # Maps a key prefix to the provider name.  Checked in order; first match wins.
@@ -210,6 +216,8 @@ def _get_settings() -> Settings:
         llm_provider=llm_provider,
         llm_api_key=llm_api_key,
         llm_base_url=get_env("LLM_BASE_URL", ""),
+        sponsor_name=get_env("SPONSOR_NAME", ""),
+        sponsor_link=get_env("SPONSOR_LINK", ""),
     )
 
 

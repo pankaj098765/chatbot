@@ -55,9 +55,7 @@ async def _reset_partner_state(state: FSMContext, bot: Bot, partner_id: int) -> 
 
 async def _has_active_session(user_id: int) -> bool:
     """Return True when Redis still has an active session mapping for user_id."""
-    partner_id = await redis.get_partner(user_id)
-    session_id = await redis.get_session_id(user_id)
-    return partner_id is not None and session_id is not None
+    return await redis.get_session_id(user_id) is not None
 
 
 # ─── /search ──────────────────────────────────────────────────────────────────

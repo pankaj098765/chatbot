@@ -303,9 +303,10 @@ async def start_fallback_session(bot: Bot, user_id: int) -> None:
         exit_msg = await controller.exit_message_async()
         if exit_msg:
             await _send_with_typing(bot, user_id, exit_msg)
+        sponsor = sponsor_line(settings.sponsor_name, settings.sponsor_link) or ""
         await bot.send_message(
             user_id,
-            t("partner_disconnected", lang) + sponsor_line(settings.sponsor_name, settings.sponsor_link),
+            t("partner_disconnected", lang) + sponsor,
             parse_mode="HTML",
         )
     except Exception as exc:

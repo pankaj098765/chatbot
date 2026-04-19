@@ -30,6 +30,7 @@ Multilingual: Reads user's chat_language + chat_mode and passes them to
 from __future__ import annotations
 
 import asyncio
+import html
 import logging
 import random
 import time
@@ -306,7 +307,7 @@ async def start_fallback_session(bot: Bot, user_id: int) -> None:
         sponsor = sponsor_line(settings.sponsor_name, settings.sponsor_link)
         await bot.send_message(
             user_id,
-            t("partner_disconnected", lang) + sponsor,
+            html.escape(t("partner_disconnected", lang)) + sponsor,
             parse_mode="HTML",
         )
     except Exception as exc:

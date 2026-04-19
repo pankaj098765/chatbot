@@ -191,7 +191,9 @@ async def _do_search(
 async def cmd_search(message: Message, state: FSMContext, bot: Bot) -> None:
     current = await state.get_state()
     lang = await get_ui_lang()
-    user_id = message.from_user.id  # type: ignore[union-attr]
+    if message.from_user is None:
+        return
+    user_id = message.from_user.id
     if current == UserState.SEARCHING:
         await message.answer(t("already_searching", lang))
         return

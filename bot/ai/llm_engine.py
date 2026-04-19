@@ -465,7 +465,7 @@ _PROMPT_TEMPLATE = (
     "Rules:\n"
     "* Keep messages short (max 1–2 lines)\n"
     "* Avoid perfect grammar\n"
-    "* Sometimes use emojis 😄😅😂✨\n"
+    "* Do NOT use emojis — plain text feels more natural and human\n"
     "* Be slightly imperfect (typos allowed)\n"
     "* Do NOT sound like AI\n"
     "* Avoid repeating patterns\n"

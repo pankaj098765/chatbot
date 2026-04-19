@@ -55,6 +55,15 @@ _FALLBACK_PARTNER_ID = -1
 # Feature 5: Minimum session duration (seconds) for a first-session user
 _FIRST_SESSION_MIN_DURATION = 180.0
 
+# Seconds of user silence before the AI sends a proactive topic-starter.
+# Only ONE topic-starter is sent per silence window; the flag resets when the
+# user replies, allowing a new one after the next silence.
+_TOPIC_START_SILENCE_THRESHOLD = 90.0
+
+# Cue injected into the LLM prompt for proactive topic-starters.
+# Never shown to the user — it only guides the LLM to produce an opener.
+_PROACTIVE_MESSAGE_CUE = "(start a new topic or say something interesting)"
+
 # ─── Persona selection ────────────────────────────────────────────────────────
 
 async def _pick_persona(user_id: int, global_patterns: dict) -> str:
@@ -231,8 +240,8 @@ async def start_fallback_session(bot: Bot, user_id: int) -> None:
 
     try:
         greeting = random.choice([
-            "hi", "hello", "hey", "👋",
-            "hiii", "helloo", "hi👋", "Hi", "Hello", "Hey",
+            "hi", "hello", "hey",
+            "hiii", "helloo", "Hi", "Hello", "Hey",
         ])
         await _send_with_typing(bot, user_id, greeting)
         message_count += 1
@@ -244,6 +253,15 @@ async def start_fallback_session(bot: Bot, user_id: int) -> None:
         )
         await redis.clear_session(user_id)
         return
+
+    # Proactive topic-starter state:
+    # - proactive_sent: True once a topic-starter has been dispatched in the
+    #   current silence window.  Reset to False when the user next replies,
+    #   allowing exactly one new topic-starter per subsequent silence window.
+    # - last_user_reply_time: timestamp of the most recent user message (None
+    #   until the user first speaks); silence is measured from this point.
+    proactive_sent: bool = False
+    last_user_reply_time: float | None = None
 
     # Main response loop
     while True:
@@ -272,8 +290,26 @@ async def start_fallback_session(bot: Bot, user_id: int) -> None:
             last_user_msg = await redis.get_fallback_user_message(user_id)
             if last_user_msg:
                 await redis.clear_fallback_user_message(user_id)
+                # User replied — reset the proactive flag so a new topic-starter
+                # can be sent the next time the user goes silent.
+                proactive_sent = False
+                last_user_reply_time = time.time()
             else:
-                # User has not replied yet — keep only the initial greeting.
+                # User is silent.  Send at most ONE proactive topic-starter per
+                # silence window; stop sending once the flag is set.
+                if not proactive_sent:
+                    silence_since = time.time() - (last_user_reply_time or start_time)
+                    if silence_since >= _TOPIC_START_SILENCE_THRESHOLD:
+                        topic_msgs = await controller.generate_response_async(
+                            user_message=_PROACTIVE_MESSAGE_CUE,
+                            is_proactive=True,
+                        )
+                        if topic_msgs:
+                            await _send_with_typing(bot, user_id, topic_msgs[0])
+                            message_count += 1
+                        # Set the flag regardless of whether the LLM produced a
+                        # message — we don't want to keep retrying on failure.
+                        proactive_sent = True
                 continue
 
             messages = await controller.generate_response_async(user_message=last_user_msg)

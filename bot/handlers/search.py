@@ -53,6 +53,11 @@ async def _reset_partner_state(state: FSMContext, bot: Bot, partner_id: int) -> 
     await partner_state.set_state(UserState.IDLE)
 
 
+async def _has_active_session(user_id: int) -> bool:
+    """Return True when Redis still has an active session mapping for user_id."""
+    return await redis.get_session_id(user_id) is not None
+
+
 # ─── /search ──────────────────────────────────────────────────────────────────
 
 
@@ -186,12 +191,18 @@ async def _do_search(
 async def cmd_search(message: Message, state: FSMContext, bot: Bot) -> None:
     current = await state.get_state()
     lang = await get_ui_lang()
+    if message.from_user is None:
+        return
+    user_id = message.from_user.id
     if current == UserState.SEARCHING:
         await message.answer(t("already_searching", lang))
         return
     if current == UserState.CONNECTED:
-        await message.answer(t("already_in_chat", lang))
-        return
+        if await _has_active_session(user_id):
+            await message.answer(t("already_in_chat", lang))
+            return
+        # Recover from stale FSM state when backend session already ended.
+        await state.set_state(UserState.IDLE)
     await _do_search(message, state, bot)
 
 
@@ -199,8 +210,13 @@ async def cmd_search(message: Message, state: FSMContext, bot: Bot) -> None:
 async def cb_search(callback: CallbackQuery, state: FSMContext, bot: Bot) -> None:
     await callback.answer()
     current = await state.get_state()
-    if current in (UserState.SEARCHING, UserState.CONNECTED):
+    if current == UserState.SEARCHING:
         return
+    if current == UserState.CONNECTED:
+        if await _has_active_session(callback.from_user.id):
+            return
+        # Recover from stale FSM state when backend session already ended.
+        await state.set_state(UserState.IDLE)
     await _do_search(callback.message, state, bot, user_id=callback.from_user.id)  # type: ignore[arg-type]
 
 

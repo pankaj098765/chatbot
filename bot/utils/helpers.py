@@ -64,8 +64,9 @@ def sponsor_line(name: str, link: str) -> str:
         return ""
     # Normalise Telegram-style links so operators can set SPONSOR_LINK
     # to "@BotName" or "t.me/BotName" without needing the full URL.
-    original_link = link
+    raw_link = link
     link = link.strip()
+    original_link = link
     if link.startswith("@"):
         link = "https://t.me/" + link[1:]
     elif link.startswith("t.me/"):
@@ -74,9 +75,9 @@ def sponsor_line(name: str, link: str) -> str:
     # to avoid injecting javascript: or other dangerous schemes.
     if not (link.startswith("https://") or link.startswith("http://")):
         logger.warning(
-            "Sponsor footer skipped: invalid SPONSOR_LINK (original=%r, normalized=%r). "
+            "Sponsor footer skipped: invalid SPONSOR_LINK (raw=%r, normalized=%r). "
             "Link must start with http:// or https://",
-            original_link,
+            raw_link,
             link,
         )
         return ""

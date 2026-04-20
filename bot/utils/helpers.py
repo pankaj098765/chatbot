@@ -45,12 +45,22 @@ def sponsor_line(name: str, link: str) -> str:
     it uses a subtle divider and an inline hyperlink so the sponsor
     notice attracts attention without feeling intrusive.
 
-    *name* is HTML-escaped to prevent injection.  *link* is validated
-    to start with ``http://`` or ``https://``; if it does not, the
-    sponsor block is suppressed entirely.
+    *name* is HTML-escaped to prevent injection.  *link* is normalised
+    before validation: Telegram ``@username`` handles are converted to
+    ``https://t.me/username`` and bare ``t.me/…`` paths are prefixed
+    with ``https://``.  Any link that still does not start with
+    ``http://`` or ``https://`` after normalisation is silently
+    suppressed to avoid injecting dangerous schemes.
     """
     if not name or not link:
         return ""
+    # Normalise Telegram-style links so operators can set SPONSOR_LINK
+    # to "@BotName" or "t.me/BotName" without needing the full URL.
+    link = link.strip()
+    if link.startswith("@"):
+        link = "https://t.me/" + link[1:]
+    elif link.startswith("t.me/"):
+        link = "https://" + link
     # Only allow safe http/https URLs — silently suppress anything else
     # to avoid injecting javascript: or other dangerous schemes.
     if not (link.startswith("https://") or link.startswith("http://")):

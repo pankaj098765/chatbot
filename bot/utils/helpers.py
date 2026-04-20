@@ -81,17 +81,17 @@ def sponsor_line(name: str, link: str) -> str:
             normalized_link,
         )
         return ""
-    if normalized_link != stripped_link:
-        logger.info(
-            "Sponsor link normalized for footer (stripped=%r, normalized=%r)",
-            stripped_link,
-            normalized_link,
-        )
     if stripped_link != raw_link:
         logger.info(
             "Sponsor link whitespace trimmed for footer (raw=%r, stripped=%r)",
             raw_link,
             stripped_link,
+        )
+    if normalized_link != stripped_link:
+        logger.info(
+            "Sponsor link normalized for footer (stripped=%r, normalized=%r)",
+            stripped_link,
+            normalized_link,
         )
     # Escape HTML special characters in the display name so that a name
     # containing < > & " does not break the message or allow injection.

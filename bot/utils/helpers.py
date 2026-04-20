@@ -3,8 +3,11 @@ bot/utils/helpers.py — Shared utility functions.
 """
 from __future__ import annotations
 
+import logging
 import uuid
 from datetime import datetime, timezone
+
+logger = logging.getLogger(__name__)
 
 
 def generate_session_id() -> str:
@@ -53,18 +56,43 @@ def sponsor_line(name: str, link: str) -> str:
     suppressed to avoid injecting dangerous schemes.
     """
     if not name or not link:
+        logger.info(
+            "Sponsor footer skipped: missing value (name_present=%s, link_present=%s)",
+            bool(name),
+            bool(link),
+        )
         return ""
     # Normalise Telegram-style links so operators can set SPONSOR_LINK
     # to "@BotName" or "t.me/BotName" without needing the full URL.
-    link = link.strip()
-    if link.startswith("@"):
-        link = "https://t.me/" + link[1:]
-    elif link.startswith("t.me/"):
-        link = "https://" + link
+    raw_link = link
+    stripped_link = raw_link.strip()
+    normalized_link = stripped_link
+    if normalized_link.startswith("@"):
+        normalized_link = "https://t.me/" + normalized_link[1:]
+    elif normalized_link.startswith("t.me/"):
+        normalized_link = "https://" + normalized_link
     # Only allow safe http/https URLs — silently suppress anything else
     # to avoid injecting javascript: or other dangerous schemes.
-    if not (link.startswith("https://") or link.startswith("http://")):
+    if not (normalized_link.startswith("https://") or normalized_link.startswith("http://")):
+        logger.warning(
+            "Sponsor footer skipped: invalid SPONSOR_LINK (raw=%r, normalized=%r). "
+            "Link must start with http:// or https://",
+            raw_link,
+            normalized_link,
+        )
         return ""
+    if stripped_link != raw_link:
+        logger.debug(
+            "Sponsor link whitespace trimmed for footer (raw=%r, stripped=%r)",
+            raw_link,
+            stripped_link,
+        )
+    if normalized_link != stripped_link:
+        logger.info(
+            "Sponsor link normalized for footer (stripped=%r, normalized=%r)",
+            stripped_link,
+            normalized_link,
+        )
     # Escape HTML special characters in the display name so that a name
     # containing < > & " does not break the message or allow injection.
     safe_name = (
@@ -77,6 +105,6 @@ def sponsor_line(name: str, link: str) -> str:
     return (
         "\n\n"
         "┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄\n"
-        f"✨ <b>Sponsored by</b> <a href=\"{link}\">{safe_name}</a>\n"
+        f"✨ <b>Sponsored by</b> <a href=\"{normalized_link}\">{safe_name}</a>\n"
         "┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄"
     )

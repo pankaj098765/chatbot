@@ -3,8 +3,11 @@ bot/utils/helpers.py — Shared utility functions.
 """
 from __future__ import annotations
 
+import logging
 import uuid
 from datetime import datetime, timezone
+
+logger = logging.getLogger(__name__)
 
 
 def generate_session_id() -> str:
@@ -53,9 +56,15 @@ def sponsor_line(name: str, link: str) -> str:
     suppressed to avoid injecting dangerous schemes.
     """
     if not name or not link:
+        logger.info(
+            "Sponsor footer skipped: missing value (name_present=%s, link_present=%s)",
+            bool(name),
+            bool(link),
+        )
         return ""
     # Normalise Telegram-style links so operators can set SPONSOR_LINK
     # to "@BotName" or "t.me/BotName" without needing the full URL.
+    original_link = link
     link = link.strip()
     if link.startswith("@"):
         link = "https://t.me/" + link[1:]
@@ -64,7 +73,19 @@ def sponsor_line(name: str, link: str) -> str:
     # Only allow safe http/https URLs — silently suppress anything else
     # to avoid injecting javascript: or other dangerous schemes.
     if not (link.startswith("https://") or link.startswith("http://")):
+        logger.warning(
+            "Sponsor footer skipped: invalid SPONSOR_LINK (original=%r, normalized=%r). "
+            "Link must start with http:// or https://",
+            original_link,
+            link,
+        )
         return ""
+    if link != original_link:
+        logger.info(
+            "Sponsor link normalized for footer (original=%r, normalized=%r)",
+            original_link,
+            link,
+        )
     # Escape HTML special characters in the display name so that a name
     # containing < > & " does not break the message or allow injection.
     safe_name = (

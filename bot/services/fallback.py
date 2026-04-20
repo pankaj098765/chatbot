@@ -36,6 +36,8 @@ import time
 
 from aiogram import Bot
 from aiogram.enums import ChatAction
+from aiogram.fsm.context import FSMContext
+from aiogram.fsm.storage.base import BaseStorage, StorageKey
 
 from bot.ai.behavior import BehaviorController
 from bot.config import settings
@@ -45,6 +47,7 @@ from bot.database import redis_client as redis
 from bot.i18n import get_ui_lang, t
 from bot.services import admin_control
 from bot.utils.helpers import generate_session_id, sponsor_line
+from bot.utils.states import UserState
 
 logger = logging.getLogger(__name__)
 
@@ -138,7 +141,7 @@ async def _send_with_typing(bot: Bot, user_id: int, text: str) -> None:
     await bot.send_message(user_id, text)
 
 
-async def start_fallback_session(bot: Bot, user_id: int) -> None:
+async def start_fallback_session(bot: Bot, user_id: int, storage: BaseStorage) -> None:
     """
     Start a simulated fallback chat session for user_id.
     Runs as a fire-and-forget asyncio task.
@@ -158,6 +161,31 @@ async def start_fallback_session(bot: Bot, user_id: int) -> None:
                  typing indicators before each message.
     """
     session_id = generate_session_id()
+    start_time = time.time()
+    message_count = 0
+
+    # Reserve the session slot in Redis immediately so that _has_active_session()
+    # returns True even while config / persona setup is still running.  Without
+    # this early registration there is a multi-second window (all the awaits below)
+    # during which a concurrent /search from the user could trigger a second
+    # fallback session, causing duplicate greetings and topic messages.
+    await redis.set_session(user_id, _FALLBACK_PARTNER_ID, session_id)
+
+    # Build an FSMContext for this user so we can read and update their state
+    # without needing the handler's state object.
+    _key = StorageKey(bot_id=bot.id, chat_id=user_id, user_id=user_id)
+    user_state = FSMContext(storage=storage, key=_key)
+
+    # Guard: if the user pressed /stop (or triggered any other state change)
+    # between launch_fallback() scheduling this task and this first execution,
+    # abort and release the session slot we just reserved.
+    current = await user_state.get_state()
+    if current != UserState.CONNECTED:
+        await redis.clear_session(user_id)
+        logger.info(
+            "Fallback session aborted (state changed before setup) for user_id=%d", user_id
+        )
+        return
 
     # Feature 6: Read admin config for randomness_level
     try:
@@ -215,16 +243,12 @@ async def start_fallback_session(bot: Bot, user_id: int) -> None:
     # Feature 9: Update global patterns for next session to diverge from
     await redis.set_global_patterns(controller.current_pattern)
 
-    start_time = time.time()
-    message_count = 0
-
     # Signal that user is "connected" to the fallback partner; store tone
-    await redis.set_session(user_id, _FALLBACK_PARTNER_ID, session_id)
     await redis.set_session_tone(user_id, tone)
 
     logger.info(
-        "Fallback session started for user_id=%d persona=%s tone=%s",
-        user_id, persona_name, tone,
+        "Fallback session started for user_id=%d persona=%s tone=%s (setup %.1fs)",
+        user_id, persona_name, tone, time.time() - start_time,
     )
 
     # Wait 35–60 seconds (random) before sending the opening greeting so the
@@ -251,6 +275,7 @@ async def start_fallback_session(bot: Bot, user_id: int) -> None:
             user_id, exc,
         )
         await redis.clear_session(user_id)
+        await user_state.set_state(UserState.IDLE)
         return
 
     # Proactive topic-starter state:
@@ -349,8 +374,11 @@ async def start_fallback_session(bot: Bot, user_id: int) -> None:
         logger.warning("Fallback session: failed to send exit message to user_id=%d: %s", user_id, exc)
 
     await redis.clear_session(user_id)
+    # Reset the user's FSM state to IDLE so they can /search again without
+    # needing the stale-state recovery path in cmd_search / cb_search.
+    await user_state.set_state(UserState.IDLE)
 
 
-def launch_fallback(bot: Bot, user_id: int) -> None:
+def launch_fallback(bot: Bot, user_id: int, storage: BaseStorage) -> None:
     """Schedule the fallback session as a background asyncio task."""
-    asyncio.create_task(start_fallback_session(bot, user_id))
+    asyncio.create_task(start_fallback_session(bot, user_id, storage))

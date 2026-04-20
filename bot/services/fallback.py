@@ -133,6 +133,12 @@ async def _record_persona_used(user_id: int, persona_name: str) -> None:
     await db.update_user(user_id, {"last_personas_used": last_personas})
 
 
+async def _cleanup_session(user_id: int, user_state: FSMContext) -> None:
+    """Release the Redis session slot and reset the user's FSM state to IDLE."""
+    await redis.clear_session(user_id)
+    await user_state.set_state(UserState.IDLE)
+
+
 async def _send_with_typing(bot: Bot, user_id: int, text: str) -> None:
     """Send a typing action then the message, mimicking a real user typing."""
     await bot.send_chat_action(user_id, ChatAction.TYPING)
@@ -194,57 +200,68 @@ async def start_fallback_session(bot: Bot, user_id: int, storage: BaseStorage) -
     except Exception:
         randomness_level = 0.5
 
-    # Feature 5: Detect first-session user and reduce randomness
-    user = await db.get_user(user_id)
-    is_first_session = bool(user and user.get("total_searches", 0) == 0)
-    if is_first_session:
-        randomness_level = 0.3  # low variance → more predictable / pleasant
+    # Guard: wrap all remaining setup I/O so that any transient failure
+    # (DB/Redis blip) releases the session slot and resets FSM state rather
+    # than leaving the user permanently stuck in CONNECTED.
+    try:
+        # Feature 5: Detect first-session user and reduce randomness
+        user = await db.get_user(user_id)
+        is_first_session = bool(user and user.get("total_searches", 0) == 0)
+        if is_first_session:
+            randomness_level = 0.3  # low variance → more predictable / pleasant
 
-    # Tone system: derive tone from the user's gender stored in their profile
-    gender = user.get("gender") if user else None
-    if gender == "female":
-        tone = "feminine"
-    elif gender == "male":
-        tone = "masculine"
-    else:
-        tone = "neutral"
+        # Tone system: derive tone from the user's gender stored in their profile
+        gender = user.get("gender") if user else None
+        if gender == "female":
+            tone = "feminine"
+        elif gender == "male":
+            tone = "masculine"
+        else:
+            tone = "neutral"
 
-    # Smart LLM: read prior-session engagement score so BehaviorController
-    # can decide whether to call the LLM or fall back to templates.
-    # Use -1.0 as a sentinel for "no history yet" (first-session users) so
-    # the controller can distinguish them from low-but-recorded engagement.
-    engagement_score: float = (
-        -1.0 if is_first_session
-        else float(user.get("last_engagement_score", 0.0) if user else 0.0)
-    )
+        # Smart LLM: read prior-session engagement score so BehaviorController
+        # can decide whether to call the LLM or fall back to templates.
+        # Use -1.0 as a sentinel for "no history yet" (first-session users) so
+        # the controller can distinguish them from low-but-recorded engagement.
+        engagement_score: float = (
+            -1.0 if is_first_session
+            else float(user.get("last_engagement_score", 0.0) if user else 0.0)
+        )
 
-    # UPDATED: read global language config — NOT per-user language fields
-    lang = await get_ui_lang()                                   # ui language for t()
-    chat_language_raw = config.get("chat_language")
-    chat_language: str = str(chat_language_raw) if chat_language_raw else str(config.get("native_language", "en"))
-    chat_mode: str = str(config.get("language_mode", "english"))
+        # UPDATED: read global language config — NOT per-user language fields
+        lang = await get_ui_lang()                                   # ui language for t()
+        chat_language_raw = config.get("chat_language")
+        chat_language: str = str(chat_language_raw) if chat_language_raw else str(config.get("native_language", "en"))
+        chat_mode: str = str(config.get("language_mode", "english"))
 
-    # Feature 9: Read current global patterns before picking persona
-    global_patterns = await redis.get_global_patterns()
+        # Feature 9: Read current global patterns before picking persona
+        global_patterns = await redis.get_global_patterns()
 
-    # Feature 2 + Fix #5 + Feature 9: Pick persona with global awareness
-    persona_name = await _pick_persona(user_id, global_patterns)
-    controller = BehaviorController(
-        persona_name=persona_name,
-        randomness_level=randomness_level,  # Feature 6
-        tone=tone,                          # Tone system
-        native_language=str(config.get("native_language", "en")),
-        language_mode=chat_mode,
-        chat_language=chat_language,        # explicit chat/LLM language channel
-        engagement_score=engagement_score,  # Smart LLM: prior engagement gate
-    )
-    await _record_persona_used(user_id, persona_name)
+        # Feature 2 + Fix #5 + Feature 9: Pick persona with global awareness
+        persona_name = await _pick_persona(user_id, global_patterns)
+        controller = BehaviorController(
+            persona_name=persona_name,
+            randomness_level=randomness_level,  # Feature 6
+            tone=tone,                          # Tone system
+            native_language=str(config.get("native_language", "en")),
+            language_mode=chat_mode,
+            chat_language=chat_language,        # explicit chat/LLM language channel
+            engagement_score=engagement_score,  # Smart LLM: prior engagement gate
+        )
+        await _record_persona_used(user_id, persona_name)
 
-    # Feature 9: Update global patterns for next session to diverge from
-    await redis.set_global_patterns(controller.current_pattern)
+        # Feature 9: Update global patterns for next session to diverge from
+        await redis.set_global_patterns(controller.current_pattern)
 
-    # Signal that user is "connected" to the fallback partner; store tone
-    await redis.set_session_tone(user_id, tone)
+        # Signal that user is "connected" to the fallback partner; store tone
+        await redis.set_session_tone(user_id, tone)
+    except Exception as exc:
+        logger.warning(
+            "Fallback session: setup failed for user_id=%d, releasing slot: %s",
+            user_id, exc,
+        )
+        await _cleanup_session(user_id, user_state)
+        return
 
     logger.info(
         "Fallback session started for user_id=%d persona=%s tone=%s (setup %.1fs)",
@@ -256,8 +273,9 @@ async def start_fallback_session(bot: Bot, user_id: int, storage: BaseStorage) -
     await asyncio.sleep(random.uniform(35.0, 60.0))
 
     # Check the session is still active before the greeting (user may have
-    # pressed /stop while we were waiting).
-    if await redis.get_partner(user_id) != _FALLBACK_PARTNER_ID:
+    # pressed /stop or /next while we were waiting).  Compare by session_id
+    # so a new fallback task that wrote a fresh -1 slot doesn't fool this check.
+    if await redis.get_session_id(user_id) != session_id:
         logger.info("Fallback session cancelled before greeting for user_id=%d", user_id)
         return
 
@@ -274,8 +292,7 @@ async def start_fallback_session(bot: Bot, user_id: int, storage: BaseStorage) -
             "Fallback session: failed to send greeting to user_id=%d: %s",
             user_id, exc,
         )
-        await redis.clear_session(user_id)
-        await user_state.set_state(UserState.IDLE)
+        await _cleanup_session(user_id, user_state)
         return
 
     # Proactive topic-starter state:
@@ -290,8 +307,10 @@ async def start_fallback_session(bot: Bot, user_id: int, storage: BaseStorage) -
     # Main response loop
     while True:
         # ── Session liveness check ────────────────────────────────────────
-        # Exit immediately if the session was cleared (e.g. user pressed /stop).
-        if await redis.get_partner(user_id) != _FALLBACK_PARTNER_ID:
+        # Exit immediately if the session was cleared or replaced (e.g. user
+        # pressed /stop or /next).  Using session_id prevents a new fallback
+        # task from being mistaken for this one (both write partner=-1).
+        if await redis.get_session_id(user_id) != session_id:
             return
 
         duration = time.time() - start_time
@@ -305,7 +324,7 @@ async def start_fallback_session(bot: Bot, user_id: int, storage: BaseStorage) -
         await asyncio.sleep(controller.get_delay())
 
         # ── Session liveness check after sleep ────────────────────────────
-        if await redis.get_partner(user_id) != _FALLBACK_PARTNER_ID:
+        if await redis.get_session_id(user_id) != session_id:
             return
 
         try:
@@ -358,7 +377,7 @@ async def start_fallback_session(bot: Bot, user_id: int, storage: BaseStorage) -
     # Only send if the session is still active (user may have pressed /stop while
     # the loop was running its last iteration).
     logger.info("Fallback session ending for user_id=%d after %d messages", user_id, message_count)
-    if await redis.get_partner(user_id) != _FALLBACK_PARTNER_ID:
+    if await redis.get_session_id(user_id) != session_id:
         return
     try:
         exit_msg = await controller.exit_message_async()
@@ -373,10 +392,7 @@ async def start_fallback_session(bot: Bot, user_id: int, storage: BaseStorage) -
     except Exception as exc:
         logger.warning("Fallback session: failed to send exit message to user_id=%d: %s", user_id, exc)
 
-    await redis.clear_session(user_id)
-    # Reset the user's FSM state to IDLE so they can /search again without
-    # needing the stale-state recovery path in cmd_search / cb_search.
-    await user_state.set_state(UserState.IDLE)
+    await _cleanup_session(user_id, user_state)
 
 
 def launch_fallback(bot: Bot, user_id: int, storage: BaseStorage) -> None:

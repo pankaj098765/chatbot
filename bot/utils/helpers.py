@@ -65,27 +65,33 @@ def sponsor_line(name: str, link: str) -> str:
     # Normalise Telegram-style links so operators can set SPONSOR_LINK
     # to "@BotName" or "t.me/BotName" without needing the full URL.
     raw_link = link
-    link = link.strip()
-    original_link = link
-    if link.startswith("@"):
-        link = "https://t.me/" + link[1:]
-    elif link.startswith("t.me/"):
-        link = "https://" + link
+    stripped_link = raw_link.strip()
+    normalized_link = stripped_link
+    if normalized_link.startswith("@"):
+        normalized_link = "https://t.me/" + normalized_link[1:]
+    elif normalized_link.startswith("t.me/"):
+        normalized_link = "https://" + normalized_link
     # Only allow safe http/https URLs — silently suppress anything else
     # to avoid injecting javascript: or other dangerous schemes.
-    if not (link.startswith("https://") or link.startswith("http://")):
+    if not (normalized_link.startswith("https://") or normalized_link.startswith("http://")):
         logger.warning(
             "Sponsor footer skipped: invalid SPONSOR_LINK (raw=%r, normalized=%r). "
             "Link must start with http:// or https://",
             raw_link,
-            link,
+            normalized_link,
         )
         return ""
-    if link != original_link:
+    if normalized_link != stripped_link:
         logger.info(
-            "Sponsor link normalized for footer (original=%r, normalized=%r)",
-            original_link,
-            link,
+            "Sponsor link normalized for footer (stripped=%r, normalized=%r)",
+            stripped_link,
+            normalized_link,
+        )
+    if stripped_link != raw_link:
+        logger.info(
+            "Sponsor link whitespace trimmed for footer (raw=%r, stripped=%r)",
+            raw_link,
+            stripped_link,
         )
     # Escape HTML special characters in the display name so that a name
     # containing < > & " does not break the message or allow injection.
@@ -99,6 +105,6 @@ def sponsor_line(name: str, link: str) -> str:
     return (
         "\n\n"
         "┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄\n"
-        f"✨ <b>Sponsored by</b> <a href=\"{link}\">{safe_name}</a>\n"
+        f"✨ <b>Sponsored by</b> <a href=\"{normalized_link}\">{safe_name}</a>\n"
         "┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄"
     )

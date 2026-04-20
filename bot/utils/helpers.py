@@ -82,7 +82,7 @@ def sponsor_line(name: str, link: str) -> str:
         )
         return ""
     if stripped_link != raw_link:
-        logger.info(
+        logger.debug(
             "Sponsor link whitespace trimmed for footer (raw=%r, stripped=%r)",
             raw_link,
             stripped_link,

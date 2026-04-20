@@ -90,7 +90,7 @@ async def _do_search(
             t("found_stranger", lang),
             reply_markup=next_keyboard(lang),
         )
-        fallback.launch_fallback(bot, user_id)
+        fallback.launch_fallback(bot, user_id, state.storage)
         return
 
     # MATCH_REAL or RETRY — add to queue and poll
@@ -176,14 +176,21 @@ async def _do_search(
 
         track_match_attempt(user_id, success=True, wait_time=wait_time)
     else:
-        # No real match found (None or simulated candidate) → trigger fallback
+        # No real match found (None or simulated candidate) → trigger fallback.
+        # Re-check state first: /stop may have fired during the poll loop's
+        # final sleep, setting state to IDLE.  If we don't check here the
+        # timeout path would override /stop and launch a duplicate fallback.
+        current_state = await state.get_state()
+        if current_state != UserState.SEARCHING:
+            await matchmaking.dequeue_user(user_id)
+            return
         await matchmaking.dequeue_user(user_id)
         await state.set_state(UserState.CONNECTED)
         await message.answer(
             t("found_stranger", lang),
             reply_markup=next_keyboard(lang),
         )
-        fallback.launch_fallback(bot, user_id)
+        fallback.launch_fallback(bot, user_id, state.storage)
         track_match_attempt(user_id, success=False, wait_time=max_wait)
 
 

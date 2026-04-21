@@ -1,6 +1,6 @@
 {
-  "welcome_message": "👋 <b>{app_name}</b> में आपका स्वागत है!\n\nआपको एक अनजान व्यक्ति से मिलाया जाएगा।\n\n• 🔍 /search — पार्टनर खोजें\n• ⏭ /next   — अगले पार्टनर पर जाएं\n• 🛑 /stop   — चैट बंद करें\n• 💳 /pay    — Premium और VIP\n• 🌐 /language — भाषा बदलें\n\n<i>आपकी पहचान कभी नहीं बताई जाती।</i>",
-  "help_message": "<b>Commands:</b>\n/start    — स्वागत स्क्रीन\n/search   — मैच खोजें\n/next     — अगले से मिलें\n/stop     — चैट छोड़ें\n/pay      — Premium / VIP\n/vip      — VIP benefits\n/language — भाषा बदलें\n\n<b>Premium</b> (⭐100 Stars): gender filter\n<b>VIP</b> (⭐250 Stars): priority matching",
+  "welcome_message": "👋 <b>{app_name}</b> में आपका स्वागत है!\n\nआपको एक अनजान व्यक्ति से मिलाया जाएगा।\n\n• 🔍 /search — पार्टनर खोजें\n• ⏭ /next   — अगले पार्टनर पर जाएं\n• 🛑 /stop   — चैट बंद करें\n• 💳 /pay    — Premium और VIP\n• ❓ /help   — सभी commands देखें\n\n<i>आपकी पहचान कभी नहीं बताई जाती।</i>",
+  "help_message": "<b>Commands:</b>\n/start    — स्वागत स्क्रीन\n/search   — मैच खोजें\n/next     — अगले से मिलें\n/stop     — चैट छोड़ें\n/pay      — Premium / VIP\n/vip      — VIP benefits\n/help     — सभी commands देखें\n\n<b>Premium</b> (⭐100 Stars): gender filter\n<b>VIP</b> (⭐250 Stars): priority matching",
   "gender_prompt": "\n\nपहले अपना gender बताएं (Premium matching के लिए):",
   "gender_set_male": "✅ Gender <b>Male</b> सेट हो गया।\n\nअब /search से पार्टनर खोजें!",
   "gender_set_female": "✅ Gender <b>Female</b> सेट हो गया।\n\nअब /search से पार्टनर खोजें!",

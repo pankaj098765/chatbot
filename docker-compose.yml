@@ -33,6 +33,8 @@ services:
       - TOGETHER_API_KEY
       - AI_ENABLED
       - PAYMENT_ENABLED
+      - SPONSOR_NAME
+      - SPONSOR_LINK
       - DEBUG
     depends_on:
       redis:

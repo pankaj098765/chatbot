@@ -6,6 +6,10 @@ from __future__ import annotations
 import logging
 import uuid
 from datetime import datetime, timezone
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from aiogram import Bot
 
 logger = logging.getLogger(__name__)
 
@@ -37,6 +41,36 @@ def mask_user_id(user_id: int) -> str:
     return f"Stranger#{abs(hash(user_id)) % 9999:04d}"
 
 
+def _escape_html(text: str) -> str:
+    """Escape HTML special characters to prevent injection."""
+    return (
+        text
+        .replace("&", "&amp;")
+        .replace("<", "&lt;")
+        .replace(">", "&gt;")
+        .replace('"', "&quot;")
+    )
+
+
+def _normalize_sponsor_link(link: str) -> str | None:
+    """Normalise a sponsor link and return the safe URL, or None if invalid.
+
+    Converts Telegram ``@username`` handles to ``https://t.me/username`` and
+    bare ``t.me/…`` paths to ``https://t.me/…``.  Returns ``None`` for any
+    link that does not resolve to an http/https URL to block dangerous schemes.
+    """
+    raw_link = link
+    stripped = raw_link.strip()
+    normalized = stripped
+    if normalized.startswith("@"):
+        normalized = "https://t.me/" + normalized[1:]
+    elif normalized.startswith("t.me/"):
+        normalized = "https://" + normalized
+    if not (normalized.startswith("https://") or normalized.startswith("http://")):
+        return None
+    return normalized
+
+
 def sponsor_line(name: str, link: str) -> str:
     """Return a beautifully formatted HTML sponsor block.
 
@@ -62,49 +96,84 @@ def sponsor_line(name: str, link: str) -> str:
             bool(link),
         )
         return ""
-    # Normalise Telegram-style links so operators can set SPONSOR_LINK
-    # to "@BotName" or "t.me/BotName" without needing the full URL.
-    raw_link = link
-    stripped_link = raw_link.strip()
-    normalized_link = stripped_link
-    if normalized_link.startswith("@"):
-        normalized_link = "https://t.me/" + normalized_link[1:]
-    elif normalized_link.startswith("t.me/"):
-        normalized_link = "https://" + normalized_link
+    normalized_link = _normalize_sponsor_link(link)
     # Only allow safe http/https URLs — silently suppress anything else
     # to avoid injecting javascript: or other dangerous schemes.
-    if not (normalized_link.startswith("https://") or normalized_link.startswith("http://")):
+    if normalized_link is None:
         logger.warning(
-            "Sponsor footer skipped: invalid SPONSOR_LINK (raw=%r, normalized=%r). "
+            "Sponsor footer skipped: invalid SPONSOR_LINK (raw=%r). "
             "Link must start with http:// or https://",
-            raw_link,
-            normalized_link,
+            link,
         )
         return ""
-    if stripped_link != raw_link:
-        logger.debug(
-            "Sponsor link whitespace trimmed for footer (raw=%r, stripped=%r)",
-            raw_link,
-            stripped_link,
-        )
-    if normalized_link != stripped_link:
+    if normalized_link != link.strip():
         logger.info(
-            "Sponsor link normalized for footer (stripped=%r, normalized=%r)",
-            stripped_link,
+            "Sponsor link normalized for footer (raw=%r, normalized=%r)",
+            link,
             normalized_link,
         )
-    # Escape HTML special characters in the display name so that a name
-    # containing < > & " does not break the message or allow injection.
-    safe_name = (
-        name
-        .replace("&", "&amp;")
-        .replace("<", "&lt;")
-        .replace(">", "&gt;")
-        .replace('"', "&quot;")
-    )
     return (
         "\n\n"
         "┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄\n"
-        f"✨ <b>Sponsored by</b> <a href=\"{normalized_link}\">{safe_name}</a>\n"
+        f"✨ <b>Sponsored by</b> <a href=\"{normalized_link}\">{_escape_html(name)}</a>\n"
         "┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄"
     )
+
+
+async def send_sponsor_card(
+    bot: "Bot",
+    user_id: int,
+    name: str,
+    link: str,
+    image_url: str,
+) -> None:
+    """Send a sponsor photo card as a separate message.
+
+    Sends a landscape banner image (ideally 1280×640 px) with the sponsor name
+    as caption and a "Visit Now" inline button linking to the sponsor URL.
+
+    Silently skips when any of *name*, *link*, or *image_url* is blank, or
+    when *link* is not a valid http/https URL after normalisation.  All
+    delivery errors are swallowed so a bad sponsor config never breaks the bot.
+    """
+    if not name or not link or not image_url:
+        return
+
+    normalized_link = _normalize_sponsor_link(link)
+    if normalized_link is None:
+        logger.warning(
+            "Sponsor card skipped: invalid SPONSOR_LINK (raw=%r).",
+            link,
+        )
+        return
+
+    # Validate image URL scheme
+    image_url = image_url.strip()
+    if not (image_url.startswith("https://") or image_url.startswith("http://")):
+        logger.warning(
+            "Sponsor card skipped: SPONSOR_IMAGE_URL is not a valid http/https URL (%r).",
+            image_url,
+        )
+        return
+
+    caption = f"✨ <b>Sponsored by {_escape_html(name)}</b>"
+
+    from aiogram.types import InlineKeyboardMarkup
+    from aiogram.utils.keyboard import InlineKeyboardBuilder
+
+    builder = InlineKeyboardBuilder()
+    builder.button(text="🔗 Visit Now", url=normalized_link)
+    keyboard: InlineKeyboardMarkup = builder.as_markup()
+
+    try:
+        await bot.send_photo(
+            user_id,
+            photo=image_url,
+            caption=caption,
+            parse_mode="HTML",
+            reply_markup=keyboard,
+        )
+    except Exception as exc:
+        logger.warning(
+            "Sponsor card: failed to send photo to user_id=%d: %s", user_id, exc
+        )

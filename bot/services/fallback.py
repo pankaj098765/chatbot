@@ -46,7 +46,7 @@ from bot.database import mongodb as db
 from bot.database import redis_client as redis
 from bot.i18n import get_ui_lang, t
 from bot.services import admin_control
-from bot.utils.helpers import generate_session_id, sponsor_line
+from bot.utils.helpers import generate_session_id, send_sponsor_card
 from bot.utils.states import UserState
 
 logger = logging.getLogger(__name__)
@@ -400,11 +400,17 @@ async def start_fallback_session(bot: Bot, user_id: int, storage: BaseStorage) -
         exit_msg = await controller.exit_message_async()
         if exit_msg:
             await _send_with_typing(bot, user_id, exit_msg)
-        sponsor = sponsor_line(settings.sponsor_name, settings.sponsor_link)
         await bot.send_message(
             user_id,
-            t("partner_disconnected", lang) + sponsor,
+            t("partner_disconnected", lang),
             parse_mode="HTML",
+        )
+        await send_sponsor_card(
+            bot,
+            user_id,
+            settings.sponsor_name,
+            settings.sponsor_link,
+            settings.sponsor_image_url,
         )
     except Exception as exc:
         logger.warning("Fallback session: failed to send exit message to user_id=%d: %s", user_id, exc)

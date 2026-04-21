@@ -355,3 +355,28 @@ async def get_fallback_user_message(user_id: int) -> str:
 async def clear_fallback_user_message(user_id: int) -> None:
     """Delete the stored last user message for user_id."""
     await _r().delete(f"fallback:last_msg:{user_id}")
+
+
+async def append_fallback_user_history(user_id: int, text: str, max_items: int = 10) -> None:
+    """
+    Append a user message to fallback short-term history.
+    Keeps only the most recent `max_items` entries.
+    """
+    key = f"fallback:user_history:{user_id}"
+    pipe = _r().pipeline()
+    pipe.rpush(key, text)
+    pipe.ltrim(key, -max_items, -1)
+    pipe.expire(key, 900)
+    await pipe.execute()
+
+
+async def get_fallback_user_history(user_id: int, limit: int = 5) -> list[str]:
+    """Return the most recent fallback user-history messages (oldest → newest)."""
+    key = f"fallback:user_history:{user_id}"
+    vals = await _r().lrange(key, -limit, -1)
+    return [v for v in vals if v]
+
+
+async def clear_fallback_user_history(user_id: int) -> None:
+    """Delete fallback short-term user-history for user_id."""
+    await _r().delete(f"fallback:user_history:{user_id}")

@@ -136,6 +136,8 @@ async def _record_persona_used(user_id: int, persona_name: str) -> None:
 async def _cleanup_session(user_id: int, user_state: FSMContext) -> None:
     """Release the Redis session slot and reset the user's FSM state to IDLE."""
     await redis.clear_session(user_id)
+    await redis.clear_fallback_user_message(user_id)
+    await redis.clear_fallback_user_history(user_id)
     await user_state.set_state(UserState.IDLE)
 
 
@@ -188,10 +190,16 @@ async def start_fallback_session(bot: Bot, user_id: int, storage: BaseStorage) -
     current = await user_state.get_state()
     if current != UserState.CONNECTED:
         await redis.clear_session(user_id)
+        await redis.clear_fallback_user_message(user_id)
+        await redis.clear_fallback_user_history(user_id)
         logger.info(
             "Fallback session aborted (state changed before setup) for user_id=%d", user_id
         )
         return
+
+    # Reset any stale fallback context from previous sessions.
+    await redis.clear_fallback_user_message(user_id)
+    await redis.clear_fallback_user_history(user_id)
 
     # Feature 6: Read admin config for randomness_level
     try:
@@ -319,7 +327,11 @@ async def start_fallback_session(bot: Bot, user_id: int, storage: BaseStorage) -
         if is_first_session and duration < _FIRST_SESSION_MIN_DURATION:
             pass  # skip exit check until minimum duration is reached
         elif controller.should_exit(duration, message_count):
-            break
+            # Avoid abrupt endings immediately after active user participation.
+            # End naturally only after a short silence window.
+            silence_duration = time.time() - (last_user_reply_time or start_time)
+            if silence_duration >= 45.0:
+                break
 
         await asyncio.sleep(controller.get_delay())
 
@@ -333,6 +345,7 @@ async def start_fallback_session(bot: Bot, user_id: int, storage: BaseStorage) -
             last_user_msg = await redis.get_fallback_user_message(user_id)
             if last_user_msg:
                 await redis.clear_fallback_user_message(user_id)
+                user_history = await redis.get_fallback_user_history(user_id, limit=5)
                 # User replied — reset the proactive flag so a new topic-starter
                 # can be sent the next time the user goes silent.
                 proactive_sent = False
@@ -355,7 +368,10 @@ async def start_fallback_session(bot: Bot, user_id: int, storage: BaseStorage) -
                         proactive_sent = True
                 continue
 
-            messages = await controller.generate_response_async(user_message=last_user_msg)
+            messages = await controller.generate_response_async(
+                user_message=last_user_msg,
+                user_history=user_history,
+            )
             # generate_response_async() may return an empty list (question-ignore)
             if not messages:
                 continue

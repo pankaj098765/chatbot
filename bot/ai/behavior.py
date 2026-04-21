@@ -99,12 +99,13 @@ class BehaviorController:
 
     # ── Internal LLM helper ──────────────────────────────────────────────────
 
-    def _build_llm_context(self, user_message: str) -> dict:
+    def _build_llm_context(self, user_message: str, user_history: list[str] | None = None) -> dict:
         return {
             "user_message": user_message,
             "persona": self._persona.name,
             "tone": self._tone,
             "history": list(self._context[-3:]),
+            "user_history": list((user_history or [])[-5:]),
             "emotional_state": self._persona.emotional_mode,
             "native_language": self._chat_language,
             "language_mode": self._language_mode,
@@ -122,6 +123,7 @@ class BehaviorController:
     async def generate_response_async(
         self,
         user_message: str = "",
+        user_history: list[str] | None = None,
         is_proactive: bool = False,
     ) -> list[str]:
         """
@@ -150,7 +152,7 @@ class BehaviorController:
 
         from bot.ai.llm_engine import generate_llm_response  # lazy import
 
-        context = self._build_llm_context(user_message)
+        context = self._build_llm_context(user_message, user_history=user_history)
         llm_msgs = await generate_llm_response(context)
         if llm_msgs is None:
             # Retry once on transient failure

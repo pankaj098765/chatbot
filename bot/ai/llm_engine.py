@@ -473,6 +473,8 @@ _PROMPT_TEMPLATE = (
     "* Keep conversation casual and slightly playful\n\n"
     "Personality: {persona}\n"
     "Mood: {emotional_state}\n\n"
+    "Recent user context:\n"
+    "{recent_user_context}\n\n"
     "Conversation:\n"
     "User: {user_message}\n\n"
     "Reply (natural, short, imperfect):"
@@ -672,6 +674,7 @@ async def generate_llm_response(context: dict) -> list[str] | None:
     persona = context.get("persona", "friendly")
     emotional_state = context.get("emotional_state", "neutral")
     history: list[str] = context.get("history", [])
+    user_history: list[str] = context.get("user_history", [])
     native_language: str = context.get("native_language", "en")
     language_mode: str = context.get("language_mode", "english")
 
@@ -682,6 +685,9 @@ async def generate_llm_response(context: dict) -> list[str] | None:
         language_instruction=language_instruction,
         persona=persona,
         emotional_state=emotional_state,
+        recent_user_context=(
+            "\n".join(f"- {msg}" for msg in user_history[-4:]) if user_history else "(none)"
+        ),
         user_message=user_message or "...",
     )
 
@@ -709,4 +715,3 @@ async def generate_llm_response(context: dict) -> list[str] | None:
         return None
 
     return apply_anti_detection(filtered)
-

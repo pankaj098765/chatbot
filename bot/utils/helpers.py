@@ -41,6 +41,36 @@ def mask_user_id(user_id: int) -> str:
     return f"Stranger#{abs(hash(user_id)) % 9999:04d}"
 
 
+def _escape_html(text: str) -> str:
+    """Escape HTML special characters to prevent injection."""
+    return (
+        text
+        .replace("&", "&amp;")
+        .replace("<", "&lt;")
+        .replace(">", "&gt;")
+        .replace('"', "&quot;")
+    )
+
+
+def _normalize_sponsor_link(link: str) -> str | None:
+    """Normalise a sponsor link and return the safe URL, or None if invalid.
+
+    Converts Telegram ``@username`` handles to ``https://t.me/username`` and
+    bare ``t.me/…`` paths to ``https://t.me/…``.  Returns ``None`` for any
+    link that does not resolve to an http/https URL to block dangerous schemes.
+    """
+    raw_link = link
+    stripped = raw_link.strip()
+    normalized = stripped
+    if normalized.startswith("@"):
+        normalized = "https://t.me/" + normalized[1:]
+    elif normalized.startswith("t.me/"):
+        normalized = "https://" + normalized
+    if not (normalized.startswith("https://") or normalized.startswith("http://")):
+        return None
+    return normalized
+
+
 def sponsor_line(name: str, link: str) -> str:
     """Return a beautifully formatted HTML sponsor block.
 
@@ -66,50 +96,26 @@ def sponsor_line(name: str, link: str) -> str:
             bool(link),
         )
         return ""
-    # Normalise Telegram-style links so operators can set SPONSOR_LINK
-    # to "@BotName" or "t.me/BotName" without needing the full URL.
-    raw_link = link
-    stripped_link = raw_link.strip()
-    normalized_link = stripped_link
-    if normalized_link.startswith("@"):
-        normalized_link = "https://t.me/" + normalized_link[1:]
-    elif normalized_link.startswith("t.me/"):
-        normalized_link = "https://" + normalized_link
+    normalized_link = _normalize_sponsor_link(link)
     # Only allow safe http/https URLs — silently suppress anything else
     # to avoid injecting javascript: or other dangerous schemes.
-    if not (normalized_link.startswith("https://") or normalized_link.startswith("http://")):
+    if normalized_link is None:
         logger.warning(
-            "Sponsor footer skipped: invalid SPONSOR_LINK (raw=%r, normalized=%r). "
+            "Sponsor footer skipped: invalid SPONSOR_LINK (raw=%r). "
             "Link must start with http:// or https://",
-            raw_link,
-            normalized_link,
+            link,
         )
         return ""
-    if stripped_link != raw_link:
-        logger.debug(
-            "Sponsor link whitespace trimmed for footer (raw=%r, stripped=%r)",
-            raw_link,
-            stripped_link,
-        )
-    if normalized_link != stripped_link:
+    if normalized_link != link.strip():
         logger.info(
-            "Sponsor link normalized for footer (stripped=%r, normalized=%r)",
-            stripped_link,
+            "Sponsor link normalized for footer (raw=%r, normalized=%r)",
+            link,
             normalized_link,
         )
-    # Escape HTML special characters in the display name so that a name
-    # containing < > & " does not break the message or allow injection.
-    safe_name = (
-        name
-        .replace("&", "&amp;")
-        .replace("<", "&lt;")
-        .replace(">", "&gt;")
-        .replace('"', "&quot;")
-    )
     return (
         "\n\n"
         "┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄\n"
-        f"✨ <b>Sponsored by</b> <a href=\"{normalized_link}\">{safe_name}</a>\n"
+        f"✨ <b>Sponsored by</b> <a href=\"{normalized_link}\">{_escape_html(name)}</a>\n"
         "┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄"
     )
 
@@ -133,19 +139,11 @@ async def send_sponsor_card(
     if not name or not link or not image_url:
         return
 
-    # Apply the same link normalisation as sponsor_line()
-    raw_link = link
-    stripped_link = raw_link.strip()
-    normalized_link = stripped_link
-    if normalized_link.startswith("@"):
-        normalized_link = "https://t.me/" + normalized_link[1:]
-    elif normalized_link.startswith("t.me/"):
-        normalized_link = "https://" + normalized_link
-    if not (normalized_link.startswith("https://") or normalized_link.startswith("http://")):
+    normalized_link = _normalize_sponsor_link(link)
+    if normalized_link is None:
         logger.warning(
-            "Sponsor card skipped: invalid SPONSOR_LINK (raw=%r, normalized=%r).",
-            raw_link,
-            normalized_link,
+            "Sponsor card skipped: invalid SPONSOR_LINK (raw=%r).",
+            link,
         )
         return
 
@@ -158,14 +156,7 @@ async def send_sponsor_card(
         )
         return
 
-    safe_name = (
-        name
-        .replace("&", "&amp;")
-        .replace("<", "&lt;")
-        .replace(">", "&gt;")
-        .replace('"', "&quot;")
-    )
-    caption = f"✨ <b>Sponsored by {safe_name}</b>"
+    caption = f"✨ <b>Sponsored by {_escape_html(name)}</b>"
 
     from aiogram.types import InlineKeyboardMarkup
     from aiogram.utils.keyboard import InlineKeyboardBuilder

@@ -14,6 +14,7 @@ from aiogram import Bot, Dispatcher
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
 from aiogram.fsm.storage.memory import MemoryStorage
+from aiogram.types import BotCommand
 
 from bot.config import settings, log_config_summary
 from bot.database import mongodb, redis_client
@@ -29,12 +30,26 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
+_BOT_COMMANDS = [
+    BotCommand(command="start",  description="Start the bot / show welcome screen"),
+    BotCommand(command="search", description="Find a random stranger to chat with"),
+    BotCommand(command="next",   description="Skip current partner and find a new one"),
+    BotCommand(command="stop",   description="End the current chat"),
+    BotCommand(command="pay",    description="View Premium & VIP subscription plans"),
+    BotCommand(command="vip",    description="Learn about VIP benefits and priority matching"),
+    BotCommand(command="help",   description="Show all available commands"),
+]
+
+
 async def on_startup(bot: Bot) -> None:
     log_config_summary()
     logger.info("Connecting to MongoDB…")
     await mongodb.connect()
     logger.info("Connecting to Redis…")
     await redis_client.connect()
+    # Register the "/" command menu shown in Telegram's command sidebar
+    await bot.set_my_commands(_BOT_COMMANDS)
+    logger.info("Bot command menu registered (%d commands).", len(_BOT_COMMANDS))
     # Fix #7 & #8: Start background monitoring tasks
     asyncio.create_task(run_watchdog(bot))
     asyncio.create_task(run_queue_monitor())

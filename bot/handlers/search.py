@@ -21,7 +21,7 @@ import asyncio
 import time
 
 from aiogram import Bot, F, Router
-from aiogram.filters import Command
+from aiogram.filters import BaseFilter, Command
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.storage.base import StorageKey
 from aiogram.types import CallbackQuery, Message
@@ -44,6 +44,17 @@ from bot.utils.helpers import sponsor_line
 from bot.utils.states import UserState
 
 router = Router()
+
+
+class MainMenuTextFilter(BaseFilter):
+    def __init__(self, translation_key: str) -> None:
+        self.translation_key = translation_key
+
+    async def __call__(self, message: Message) -> bool:
+        if not message.text:
+            return False
+        lang = await get_ui_lang()
+        return message.text.strip() == t(self.translation_key, lang)
 
 
 async def _reset_partner_state(state: FSMContext, bot: Bot, partner_id: int) -> None:
@@ -350,20 +361,32 @@ async def cb_search_by_gender(callback: CallbackQuery, state: FSMContext, bot: B
     )
 
 
-@router.message(F.text)
-async def menu_buttons(message: Message, state: FSMContext, bot: Bot) -> None:
-    lang = await get_ui_lang()
-    text = (message.text or "").strip()
-
-    if text == t("search_button", lang):
-        await cmd_search(message, state, bot)
-        return
-
-    if text != t("search_by_gender_button", lang):
-        return
-
+@router.message(MainMenuTextFilter("search_button"))
+async def handle_main_menu_search_button(message: Message, state: FSMContext, bot: Bot) -> None:
     current = await state.get_state()
-    if current in (UserState.SEARCHING, UserState.CONNECTED):
+    lang = await get_ui_lang()
+    if current == UserState.SEARCHING:
+        await message.answer(t("already_searching", lang))
+        return
+    if current == UserState.CONNECTED and message.from_user is not None:
+        if await _has_active_session(message.from_user.id):
+            await message.answer(t("already_in_chat", lang))
+            return
+    await cmd_search(message, state, bot)
+
+
+@router.message(MainMenuTextFilter("search_by_gender_button"))
+async def handle_main_menu_search_by_gender_button(
+    message: Message,
+    state: FSMContext,
+) -> None:
+    lang = await get_ui_lang()
+    current = await state.get_state()
+    if current == UserState.SEARCHING:
+        await message.answer(t("already_searching", lang))
+        return
+    if current == UserState.CONNECTED:
+        await message.answer(t("already_in_chat", lang))
         return
 
     user = await db.get_or_create_user(message.from_user.id)  # type: ignore[union-attr]

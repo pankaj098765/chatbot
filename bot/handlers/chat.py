@@ -19,6 +19,7 @@ Language:  All user-facing strings use t() with the global UI language from
 from __future__ import annotations
 
 from aiogram import Bot, F, Router
+from aiogram.exceptions import TelegramBadRequest
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message
 
@@ -121,6 +122,11 @@ async def cb_gender(callback: CallbackQuery, state: FSMContext) -> None:
     lang = await get_ui_lang()
     key = "gender_set_male" if gender == "male" else "gender_set_female"
 
+    try:
+        await callback.message.delete()  # type: ignore[union-attr]
+    except TelegramBadRequest:
+        pass
+
     await callback.message.answer(  # type: ignore[union-attr]
         t(key, lang),
         parse_mode="HTML",
@@ -146,6 +152,11 @@ async def cb_feedback(callback: CallbackQuery) -> None:
     await experience.update_feedback_score(user_id, positive=(rating == "good"))
 
     lang = await get_ui_lang()
+
+    try:
+        await callback.message.delete()  # type: ignore[union-attr]
+    except TelegramBadRequest:
+        pass
 
     await callback.message.answer(  # type: ignore[union-attr]
         t("feedback_thanks", lang),

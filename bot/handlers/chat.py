@@ -25,7 +25,8 @@ from aiogram.types import CallbackQuery, Message
 from bot.database import mongodb as db
 from bot.database import redis_client as redis
 from bot.i18n import get_ui_lang, t
-from bot.keyboards.inline import feedback_keyboard, search_keyboard
+from bot.keyboards.inline import feedback_keyboard
+from bot.keyboards.menu import main_menu_keyboard
 from bot.services import anti_abuse, experience
 from bot.services.analytics import track_feedback
 from bot.services.matchmaking import calc_priority_score
@@ -120,10 +121,10 @@ async def cb_gender(callback: CallbackQuery, state: FSMContext) -> None:
     lang = await get_ui_lang()
     key = "gender_set_male" if gender == "male" else "gender_set_female"
 
-    await callback.message.edit_text(  # type: ignore[union-attr]
+    await callback.message.answer(  # type: ignore[union-attr]
         t(key, lang),
         parse_mode="HTML",
-        reply_markup=search_keyboard(lang),
+        reply_markup=main_menu_keyboard(lang),
     )
     await state.set_state(UserState.IDLE)
 
@@ -146,9 +147,9 @@ async def cb_feedback(callback: CallbackQuery) -> None:
 
     lang = await get_ui_lang()
 
-    await callback.message.edit_text(  # type: ignore[union-attr]
+    await callback.message.answer(  # type: ignore[union-attr]
         t("feedback_thanks", lang),
-        reply_markup=search_keyboard(lang),
+        reply_markup=main_menu_keyboard(lang),
     )
 
 
@@ -165,4 +166,4 @@ async def fallback_unhandled(message: Message, state: FSMContext) -> None:
         await message.answer(t("abuse_blocked", lang))
     else:
         # IDLE or no state — guide the user to /search
-        await message.answer(t("not_in_chat", lang), reply_markup=search_keyboard(lang))
+        await message.answer(t("not_in_chat", lang), reply_markup=main_menu_keyboard(lang))

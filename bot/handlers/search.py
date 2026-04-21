@@ -33,9 +33,9 @@ from bot.i18n import get_ui_lang, t
 from bot.keyboards.inline import (
     gender_preference_keyboard,
     next_keyboard,
-    search_keyboard,
     stop_keyboard,
 )
+from bot.keyboards.menu import main_menu_keyboard
 from bot.services import anti_abuse, experience, fallback, matchmaking, session
 from bot.services.analytics import track_match_attempt
 from bot.services.queue_monitor import collect_queue_stats, get_adaptive_poll_timeout
@@ -247,7 +247,7 @@ async def _do_next(message: Message, state: FSMContext, bot: Bot, user_id: int |
             await bot.send_message(
                 partner_id,
                 t("partner_left_next", lang) + sponsor_line(settings.sponsor_name, settings.sponsor_link),
-                reply_markup=search_keyboard(lang),
+                reply_markup=main_menu_keyboard(lang),
                 parse_mode="HTML",
             )
         except Exception:
@@ -289,7 +289,7 @@ async def _do_stop(message: Message, state: FSMContext, bot: Bot, user_id: int |
 
     await message.answer(
         t("chat_ended", lang) + sponsor_line(settings.sponsor_name, settings.sponsor_link),
-        reply_markup=search_keyboard(lang),
+        reply_markup=main_menu_keyboard(lang),
         parse_mode="HTML",
     )
 
@@ -301,7 +301,7 @@ async def _do_stop(message: Message, state: FSMContext, bot: Bot, user_id: int |
             await bot.send_message(
                 partner_id,
                 t("partner_left_stop", lang) + sponsor_line(settings.sponsor_name, settings.sponsor_link),
-                reply_markup=search_keyboard(lang),
+                reply_markup=main_menu_keyboard(lang),
                 parse_mode="HTML",
             )
         except Exception:
@@ -345,6 +345,33 @@ async def cb_search_by_gender(callback: CallbackQuery, state: FSMContext, bot: B
     # Premium / VIP: ask which gender they want to match with
     await callback.answer()
     await callback.message.answer(  # type: ignore[union-attr]
+        t("gender_search_prompt", lang),
+        reply_markup=gender_preference_keyboard(lang),
+    )
+
+
+@router.message(F.text)
+async def menu_buttons(message: Message, state: FSMContext, bot: Bot) -> None:
+    lang = await get_ui_lang()
+    text = (message.text or "").strip()
+
+    if text == t("search_button", lang):
+        await cmd_search(message, state, bot)
+        return
+
+    if text != t("search_by_gender_button", lang):
+        return
+
+    current = await state.get_state()
+    if current in (UserState.SEARCHING, UserState.CONNECTED):
+        return
+
+    user = await db.get_or_create_user(message.from_user.id)  # type: ignore[union-attr]
+    if not user.get("is_premium") and not user.get("is_vip"):
+        await message.answer(t("gender_search_locked", lang))
+        return
+
+    await message.answer(
         t("gender_search_prompt", lang),
         reply_markup=gender_preference_keyboard(lang),
     )

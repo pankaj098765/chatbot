@@ -17,8 +17,8 @@ from bot.database import mongodb as db
 from bot.i18n import get_ui_lang, t
 from bot.keyboards.inline import (
     gender_keyboard,
-    search_keyboard,
 )
+from bot.keyboards.menu import main_menu_keyboard
 from bot.utils.states import UserState
 from config.app_config import app_config
 
@@ -50,7 +50,7 @@ async def cmd_start(message: Message, state: FSMContext) -> None:
         await message.answer(
             t("welcome_message", lang, app_name=app_config.brand_name),
             parse_mode="HTML",
-            reply_markup=search_keyboard(lang),
+            reply_markup=main_menu_keyboard(lang),
         )
 
     await state.set_state(UserState.IDLE)

@@ -25,7 +25,8 @@ from aiogram.types import (
 from bot.config import settings
 from bot.database import mongodb as db
 from bot.i18n import get_ui_lang, t
-from bot.keyboards.inline import payment_keyboard, search_keyboard
+from bot.keyboards.inline import payment_keyboard
+from bot.keyboards.menu import main_menu_keyboard
 from config.app_config import app_config
 
 router = Router()
@@ -137,7 +138,7 @@ async def successful_payment(message: Message) -> None:
         await message.answer(
             t("premium_activated", lang, expiry=expiry_str),
             parse_mode="HTML",
-            reply_markup=search_keyboard(),
+            reply_markup=main_menu_keyboard(lang),
         )
     elif plan == "vip":
         await db.update_user(
@@ -146,5 +147,5 @@ async def successful_payment(message: Message) -> None:
         await message.answer(
             t("vip_activated", lang, expiry=expiry_str),
             parse_mode="HTML",
-            reply_markup=search_keyboard(),
+            reply_markup=main_menu_keyboard(lang),
         )

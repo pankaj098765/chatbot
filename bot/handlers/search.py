@@ -40,7 +40,7 @@ from bot.services import anti_abuse, experience, fallback, matchmaking, session
 from bot.services.analytics import track_match_attempt
 from bot.services.queue_monitor import collect_queue_stats, get_adaptive_poll_timeout
 from bot.services.retention_engine import apply_warm_start_boost
-from bot.utils.helpers import sponsor_line
+from bot.utils.helpers import send_sponsor_card
 from bot.utils.states import UserState
 
 router = Router()
@@ -257,9 +257,16 @@ async def _do_next(message: Message, state: FSMContext, bot: Bot, user_id: int |
         try:
             await bot.send_message(
                 partner_id,
-                t("partner_left_next", lang) + sponsor_line(settings.sponsor_name, settings.sponsor_link),
+                t("partner_left_next", lang),
                 reply_markup=main_menu_keyboard(lang),
                 parse_mode="HTML",
+            )
+            await send_sponsor_card(
+                bot,
+                partner_id,
+                settings.sponsor_name,
+                settings.sponsor_link,
+                settings.sponsor_image_url,
             )
         except Exception:
             pass
@@ -299,9 +306,16 @@ async def _do_stop(message: Message, state: FSMContext, bot: Bot, user_id: int |
     await state.set_state(UserState.IDLE)
 
     await message.answer(
-        t("chat_ended", lang) + sponsor_line(settings.sponsor_name, settings.sponsor_link),
+        t("chat_ended", lang),
         reply_markup=main_menu_keyboard(lang),
         parse_mode="HTML",
+    )
+    await send_sponsor_card(
+        bot,
+        message.chat.id,
+        settings.sponsor_name,
+        settings.sponsor_link,
+        settings.sponsor_image_url,
     )
 
     # UPDATED: all users share the same global language
@@ -311,9 +325,16 @@ async def _do_stop(message: Message, state: FSMContext, bot: Bot, user_id: int |
         try:
             await bot.send_message(
                 partner_id,
-                t("partner_left_stop", lang) + sponsor_line(settings.sponsor_name, settings.sponsor_link),
+                t("partner_left_stop", lang),
                 reply_markup=main_menu_keyboard(lang),
                 parse_mode="HTML",
+            )
+            await send_sponsor_card(
+                bot,
+                partner_id,
+                settings.sponsor_name,
+                settings.sponsor_link,
+                settings.sponsor_image_url,
             )
         except Exception:
             pass

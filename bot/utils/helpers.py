@@ -166,9 +166,17 @@ async def send_sponsor_card(
     keyboard: InlineKeyboardMarkup = builder.as_markup()
 
     try:
+        import aiohttp
+        from aiogram.types import BufferedInputFile
+
+        async with aiohttp.ClientSession() as session:
+            async with session.get(image_url, timeout=aiohttp.ClientTimeout(total=15)) as resp:
+                resp.raise_for_status()
+                image_bytes = await resp.read()
+
         await bot.send_photo(
             user_id,
-            photo=image_url,
+            photo=BufferedInputFile(image_bytes, filename="sponsor.jpg"),
             caption=caption,
             parse_mode="HTML",
             reply_markup=keyboard,

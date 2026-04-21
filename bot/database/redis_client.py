@@ -21,6 +21,7 @@ import redis.asyncio as aioredis
 from bot.config import settings
 
 _redis: aioredis.Redis | None = None
+_FALLBACK_USER_HISTORY_TTL_SECONDS = 900
 
 
 async def connect() -> None:
@@ -366,15 +367,14 @@ async def append_fallback_user_history(user_id: int, text: str, max_items: int =
     pipe = _r().pipeline()
     pipe.rpush(key, text)
     pipe.ltrim(key, -max_items, -1)
-    pipe.expire(key, 900)
+    pipe.expire(key, _FALLBACK_USER_HISTORY_TTL_SECONDS)
     await pipe.execute()
 
 
 async def get_fallback_user_history(user_id: int, limit: int = 5) -> list[str]:
     """Return the most recent fallback user-history messages (oldest → newest)."""
     key = f"fallback:user_history:{user_id}"
-    vals = await _r().lrange(key, -limit, -1)
-    return [v for v in vals if v]
+    return await _r().lrange(key, -limit, -1)
 
 
 async def clear_fallback_user_history(user_id: int) -> None:

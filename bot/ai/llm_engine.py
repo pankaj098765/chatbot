@@ -686,7 +686,7 @@ async def generate_llm_response(context: dict) -> list[str] | None:
         persona=persona,
         emotional_state=emotional_state,
         recent_user_context=(
-            "\n".join(f"- {msg}" for msg in user_history[-4:]) if user_history else "(none)"
+            "\n".join(f"- {msg}" for msg in user_history[-5:]) if user_history else "(none)"
         ),
         user_message=user_message or "...",
     )

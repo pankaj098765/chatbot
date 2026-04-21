@@ -343,6 +343,7 @@ async def start_fallback_session(bot: Bot, user_id: int, storage: BaseStorage) -
             # Read the most recent user message for LLM context, then clear it
             # so each response cycle sees only fresh input.
             last_user_msg = await redis.get_fallback_user_message(user_id)
+            user_history: list[str] = []
             if last_user_msg:
                 await redis.clear_fallback_user_message(user_id)
                 user_history = await redis.get_fallback_user_history(user_id, limit=5)

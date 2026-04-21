@@ -39,6 +39,7 @@ _GENDER_CHECK_PATTERNS = frozenset({
     "boy?", "girl?", "guy?", "asl", "asl?",
     "male", "female",
 })
+_MAX_FALLBACK_QUOTED_TEXT_LENGTH = 220
 
 
 def _build_fallback_context_text(message: Message, text: str) -> str:
@@ -54,7 +55,8 @@ def _build_fallback_context_text(message: Message, text: str) -> str:
     if not quoted:
         return text
 
-    quoted = quoted[:220]
+    if len(quoted) > _MAX_FALLBACK_QUOTED_TEXT_LENGTH:
+        quoted = quoted[:_MAX_FALLBACK_QUOTED_TEXT_LENGTH] + "..."
     return f"Replying to: {quoted}\nUser says: {text}"
 
 

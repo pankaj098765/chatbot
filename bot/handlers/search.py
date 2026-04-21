@@ -330,10 +330,10 @@ async def cb_stop(callback: CallbackQuery, state: FSMContext, bot: Bot) -> None:
 @router.callback_query(F.data == "search_by_gender")
 async def cb_search_by_gender(callback: CallbackQuery, state: FSMContext, bot: Bot) -> None:
     """Show gender-preference picker to premium/VIP users; locked popup for others."""
-    await callback.answer()
     lang = await get_ui_lang()
     current = await state.get_state()
     if current in (UserState.SEARCHING, UserState.CONNECTED):
+        await callback.answer()
         return
 
     user = await db.get_or_create_user(callback.from_user.id)
@@ -343,6 +343,7 @@ async def cb_search_by_gender(callback: CallbackQuery, state: FSMContext, bot: B
         return
 
     # Premium / VIP: ask which gender they want to match with
+    await callback.answer()
     await callback.message.answer(  # type: ignore[union-attr]
         t("gender_search_prompt", lang),
         reply_markup=gender_preference_keyboard(lang),
@@ -352,10 +353,10 @@ async def cb_search_by_gender(callback: CallbackQuery, state: FSMContext, bot: B
 @router.callback_query(F.data.in_({"search_gender_male", "search_gender_female"}))
 async def cb_search_gender_pref(callback: CallbackQuery, state: FSMContext, bot: Bot) -> None:
     """Set gender preference and start a gender-filtered search for premium/VIP users."""
-    await callback.answer()
     lang = await get_ui_lang()
     current = await state.get_state()
     if current in (UserState.SEARCHING, UserState.CONNECTED):
+        await callback.answer()
         return
 
     user = await db.get_or_create_user(callback.from_user.id)
@@ -363,6 +364,7 @@ async def cb_search_gender_pref(callback: CallbackQuery, state: FSMContext, bot:
         await callback.answer(t("gender_search_locked", lang), show_alert=True)
         return
 
+    await callback.answer()
     pref = "male" if callback.data == "search_gender_male" else "female"
     await db.update_user(callback.from_user.id, {"gender_preference": pref})
     await _do_search(callback.message, state, bot, user_id=callback.from_user.id)  # type: ignore[arg-type]

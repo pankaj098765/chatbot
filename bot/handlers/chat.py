@@ -39,6 +39,25 @@ _GENDER_CHECK_PATTERNS = frozenset({
     "boy?", "girl?", "guy?", "asl", "asl?",
     "male", "female",
 })
+_MAX_FALLBACK_QUOTED_TEXT_LENGTH = 220
+
+
+def _build_fallback_context_text(message: Message, text: str) -> str:
+    """
+    Build a context-rich user message for fallback LLM routing.
+    If the message is a Telegram reply, include a short quoted snippet.
+    """
+    reply = message.reply_to_message
+    if not reply:
+        return text
+
+    quoted = (reply.text or reply.caption or "").strip()
+    if not quoted:
+        return text
+
+    if len(quoted) > _MAX_FALLBACK_QUOTED_TEXT_LENGTH:
+        quoted = quoted[:_MAX_FALLBACK_QUOTED_TEXT_LENGTH] + "..."
+    return f"Replying to: {quoted}\nUser says: {text}"
 
 
 # ─── Message relay ────────────────────────────────────────────────────────────
@@ -71,7 +90,9 @@ async def relay_message(message: Message, state: FSMContext, bot: Bot) -> None:
         # Fallback session — store the user's message so the LLM engine can use
         # it as context when generating the next response, then return.
         if text:
-            await redis.set_fallback_user_message(user_id, text)
+            context_text = _build_fallback_context_text(message, text)
+            await redis.set_fallback_user_message(user_id, context_text)
+            await redis.append_fallback_user_history(user_id, context_text)
         return
 
     # Relay to real partner

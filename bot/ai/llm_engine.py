@@ -291,6 +291,7 @@ def _get_client():
         _client = AsyncOpenAI(
             api_key=api_key,
             base_url=base_url,
+            max_retries=1,
         )
         _client_provider = provider
         logger.info(
@@ -598,7 +599,7 @@ async def _complete_openai_compat(
         messages=messages,
         max_tokens=60,
         temperature=0.9,
-        timeout=8.0,
+        timeout=25.0,
     )
     return (response.choices[0].message.content or "").strip()
 

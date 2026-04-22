@@ -253,7 +253,7 @@ async def _do_next(message: Message, state: FSMContext, bot: Bot, user_id: int |
     sponsor = sponsor_line(settings.sponsor_name, settings.sponsor_link)
     if sponsor:
         await message.answer(
-            sponsor.lstrip("\n"),
+            sponsor,
             parse_mode="HTML",
         )
 

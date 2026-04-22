@@ -206,6 +206,17 @@ def _resolve_llm_provider_and_key() -> tuple[str, str]:
 def _get_settings() -> Settings:
     token = get_env("BOT_TOKEN", required=True)
     llm_provider, llm_api_key = _resolve_llm_provider_and_key()
+    # Parse optional description from SPONSOR_NAME using , separator.
+    # e.g. SPONSOR_NAME=AcmeCo,The fastest VPN on the planet
+    raw_sponsor = get_env("SPONSOR_NAME", "")
+    if "," in raw_sponsor:
+        sponsor_name, sponsor_description = (
+            part.strip() for part in raw_sponsor.split(",", 1)
+        )
+    else:
+        sponsor_name = raw_sponsor.strip()
+        sponsor_description = ""
+
     cfg = Settings(
         bot_token=token,
         mongodb_uri=get_env("MONGODB_URI", "mongodb://localhost:27017"),
@@ -218,18 +229,10 @@ def _get_settings() -> Settings:
         llm_provider=llm_provider,
         llm_api_key=llm_api_key,
         llm_base_url=get_env("LLM_BASE_URL", ""),
+        sponsor_name=sponsor_name,
         sponsor_link=get_env("SPONSOR_LINK", ""),
+        sponsor_description=sponsor_description,
     )
-    # Parse optional description from SPONSOR_NAME using , separator.
-    # e.g. SPONSOR_NAME=AcmeCo,The fastest VPN on the planet
-    raw_sponsor = get_env("SPONSOR_NAME", "")
-    if "," in raw_sponsor:
-        _sname, _sdesc = raw_sponsor.split(",", 1)
-        cfg.sponsor_name = _sname.strip()
-        cfg.sponsor_description = _sdesc.strip()
-    else:
-        cfg.sponsor_name = raw_sponsor.strip()
-        cfg.sponsor_description = ""
     return cfg
 
 

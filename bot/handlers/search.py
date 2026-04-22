@@ -250,6 +250,11 @@ async def _do_next(message: Message, state: FSMContext, bot: Bot, user_id: int |
     # End current session — Feature 4: pass bot for exit experience message
     await session.end_session(user_id, exit_reason="next", bot=bot)
 
+    await message.answer(
+        t("chat_ended", lang) + sponsor_line(settings.sponsor_name, settings.sponsor_link),
+        parse_mode="HTML",
+    )
+
     # UPDATED: all users share the same global language
     if partner_id and partner_id > 0:
         # Reset partner's FSM state to IDLE so they can /search again

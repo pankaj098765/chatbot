@@ -46,7 +46,7 @@ from bot.database import mongodb as db
 from bot.database import redis_client as redis
 from bot.i18n import get_ui_lang, t
 from bot.services import admin_control
-from bot.utils.helpers import generate_session_id, sponsor_button
+from bot.utils.helpers import SPONSOR_TEASER_TEXT, generate_session_id, sponsor_button
 from bot.utils.states import UserState
 
 logger = logging.getLogger(__name__)
@@ -409,7 +409,7 @@ async def start_fallback_session(bot: Bot, user_id: int, storage: BaseStorage) -
         if btn:
             await bot.send_message(
                 user_id,
-                "✨ <b>Today's Sponsor</b>",
+                SPONSOR_TEASER_TEXT,
                 reply_markup=btn,
                 parse_mode="HTML",
             )

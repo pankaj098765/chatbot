@@ -40,7 +40,7 @@ from bot.services import anti_abuse, experience, fallback, matchmaking, session
 from bot.services.analytics import track_match_attempt
 from bot.services.queue_monitor import collect_queue_stats, get_adaptive_poll_timeout
 from bot.services.retention_engine import apply_warm_start_boost
-from bot.utils.helpers import sponsor_button
+from bot.utils.helpers import SPONSOR_TEASER_TEXT, sponsor_button
 from bot.utils.states import UserState
 
 router = Router()
@@ -253,7 +253,7 @@ async def _do_next(message: Message, state: FSMContext, bot: Bot, user_id: int |
     btn = sponsor_button(settings.sponsor_name, settings.sponsor_link)
     if btn:
         await message.answer(
-            "✨ <b>Today's Sponsor</b>",
+            SPONSOR_TEASER_TEXT,
             reply_markup=btn,
             parse_mode="HTML",
         )
@@ -272,7 +272,7 @@ async def _do_next(message: Message, state: FSMContext, bot: Bot, user_id: int |
             if btn:
                 await bot.send_message(
                     partner_id,
-                    "✨ <b>Today's Sponsor</b>",
+                    SPONSOR_TEASER_TEXT,
                     reply_markup=btn,
                     parse_mode="HTML",
                 )
@@ -322,7 +322,7 @@ async def _do_stop(message: Message, state: FSMContext, bot: Bot, user_id: int |
     btn = sponsor_button(settings.sponsor_name, settings.sponsor_link)
     if btn:
         await message.answer(
-            "✨ <b>Today's Sponsor</b>",
+            SPONSOR_TEASER_TEXT,
             reply_markup=btn,
             parse_mode="HTML",
         )
@@ -341,7 +341,7 @@ async def _do_stop(message: Message, state: FSMContext, bot: Bot, user_id: int |
             if btn:
                 await bot.send_message(
                     partner_id,
-                    "✨ <b>Today's Sponsor</b>",
+                    SPONSOR_TEASER_TEXT,
                     reply_markup=btn,
                     parse_mode="HTML",
                 )

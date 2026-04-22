@@ -138,6 +138,10 @@ def sponsor_button(name: str, link: str) -> InlineKeyboardMarkup | None:
         )
         return None
     builder = InlineKeyboardBuilder()
-    builder.button(text=f"✨ Visit Sponsor — {_escape_html(name)}", url=normalized)
+    builder.button(text=f"✨ Visit Sponsor — {name}", url=normalized)
     return builder.as_markup()
+
+
+# Teaser header shown above the sponsor button in chat messages.
+SPONSOR_TEASER_TEXT = "✨ <b>Today's Sponsor</b>"
 

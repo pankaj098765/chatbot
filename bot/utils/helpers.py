@@ -6,10 +6,6 @@ from __future__ import annotations
 import logging
 import uuid
 from datetime import datetime, timezone
-from typing import TYPE_CHECKING
-
-if TYPE_CHECKING:
-    from aiogram import Bot
 
 logger = logging.getLogger(__name__)
 
@@ -119,69 +115,3 @@ def sponsor_line(name: str, link: str) -> str:
         "┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄"
     )
 
-
-async def send_sponsor_card(
-    bot: "Bot",
-    user_id: int,
-    name: str,
-    link: str,
-    image_url: str,
-) -> None:
-    """Send a sponsor photo card as a separate message.
-
-    Sends a landscape banner image (ideally 1280×640 px) with the sponsor name
-    as caption and a "Visit Now" inline button linking to the sponsor URL.
-
-    Silently skips when any of *name*, *link*, or *image_url* is blank, or
-    when *link* is not a valid http/https URL after normalisation.  All
-    delivery errors are swallowed so a bad sponsor config never breaks the bot.
-    """
-    if not name or not link or not image_url:
-        return
-
-    normalized_link = _normalize_sponsor_link(link)
-    if normalized_link is None:
-        logger.warning(
-            "Sponsor card skipped: invalid SPONSOR_LINK (raw=%r).",
-            link,
-        )
-        return
-
-    # Validate image URL scheme
-    image_url = image_url.strip()
-    if not (image_url.startswith("https://") or image_url.startswith("http://")):
-        logger.warning(
-            "Sponsor card skipped: SPONSOR_IMAGE_URL is not a valid http/https URL (%r).",
-            image_url,
-        )
-        return
-
-    caption = f"✨ <b>Sponsored by {_escape_html(name)}</b>"
-
-    from aiogram.types import InlineKeyboardMarkup
-    from aiogram.utils.keyboard import InlineKeyboardBuilder
-
-    builder = InlineKeyboardBuilder()
-    builder.button(text="🔗 Visit Now", url=normalized_link)
-    keyboard: InlineKeyboardMarkup = builder.as_markup()
-
-    try:
-        import aiohttp
-        from aiogram.types import BufferedInputFile
-
-        async with aiohttp.ClientSession() as session:
-            async with session.get(image_url, timeout=aiohttp.ClientTimeout(total=15)) as resp:
-                resp.raise_for_status()
-                image_bytes = await resp.read()
-
-        await bot.send_photo(
-            user_id,
-            photo=BufferedInputFile(image_bytes, filename="sponsor.jpg"),
-            caption=caption,
-            parse_mode="HTML",
-            reply_markup=keyboard,
-        )
-    except Exception as exc:
-        logger.warning(
-            "Sponsor card: failed to send photo to user_id=%d: %s", user_id, exc
-        )

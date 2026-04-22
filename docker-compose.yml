@@ -35,7 +35,6 @@ services:
       - PAYMENT_ENABLED
       - SPONSOR_NAME
       - SPONSOR_LINK
-      - SPONSOR_IMAGE_URL
       - DEBUG
     depends_on:
       redis:

@@ -101,10 +101,12 @@ class Settings:
     llm_base_url: str = ""
 
     # Sponsor branding — shown as a subtle line on every disconnect message.
-    # Set both SPONSOR_NAME and SPONSOR_LINK in .env; leave either empty to
-    # disable the sponsor line without touching any other code.
+    # Set SPONSOR_NAME (optionally with a description after a , separator) and
+    # SPONSOR_LINK in .env; leave either empty to disable the sponsor block.
+    # e.g.  SPONSOR_NAME=AcmeCo,The fastest VPN on the planet
     sponsor_name: str = ""
     sponsor_link: str = ""
+    sponsor_description: str = ""
 
 
 # ─── Key-format fingerprints ─────────────────────────────────────────────────
@@ -204,7 +206,7 @@ def _resolve_llm_provider_and_key() -> tuple[str, str]:
 def _get_settings() -> Settings:
     token = get_env("BOT_TOKEN", required=True)
     llm_provider, llm_api_key = _resolve_llm_provider_and_key()
-    return Settings(
+    cfg = Settings(
         bot_token=token,
         mongodb_uri=get_env("MONGODB_URI", "mongodb://localhost:27017"),
         redis_url=get_env("REDIS_URL", "redis://localhost:6379"),
@@ -216,9 +218,19 @@ def _get_settings() -> Settings:
         llm_provider=llm_provider,
         llm_api_key=llm_api_key,
         llm_base_url=get_env("LLM_BASE_URL", ""),
-        sponsor_name=get_env("SPONSOR_NAME", ""),
         sponsor_link=get_env("SPONSOR_LINK", ""),
     )
+    # Parse optional description from SPONSOR_NAME using , separator.
+    # e.g. SPONSOR_NAME=AcmeCo,The fastest VPN on the planet
+    raw_sponsor = get_env("SPONSOR_NAME", "")
+    if "," in raw_sponsor:
+        _sname, _sdesc = raw_sponsor.split(",", 1)
+        cfg.sponsor_name = _sname.strip()
+        cfg.sponsor_description = _sdesc.strip()
+    else:
+        cfg.sponsor_name = raw_sponsor.strip()
+        cfg.sponsor_description = ""
+    return cfg
 
 
 settings = _get_settings()

@@ -7,6 +7,9 @@ import logging
 import uuid
 from datetime import datetime, timezone
 
+from aiogram.types import InlineKeyboardMarkup
+from aiogram.utils.keyboard import InlineKeyboardBuilder
+
 logger = logging.getLogger(__name__)
 
 
@@ -114,4 +117,42 @@ def sponsor_line(name: str, link: str) -> str:
         f"✨ <b>Sponsored by</b> <a href=\"{normalized_link}\">{_escape_html(name)}</a>\n"
         "┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄"
     )
+
+
+def sponsor_button(name: str, link: str) -> InlineKeyboardMarkup | None:
+    """Return an inline URL button for the sponsor, or ``None`` if not configured.
+
+    The button label reads *🎁 Check Out <name>* and opens *link* directly
+    in the user's browser.  Returns ``None`` when either *name* or *link* is
+    blank, or when *link* is not a valid http/https URL after normalisation, so
+    callers can skip sending the button entirely without additional checks.
+    """
+    if not name or not link:
+        return None
+    normalized = _normalize_sponsor_link(link)
+    if normalized is None:
+        logger.warning(
+            "Sponsor button skipped: invalid SPONSOR_LINK (raw=%r). "
+            "Link must start with http:// or https://",
+            link,
+        )
+        return None
+    builder = InlineKeyboardBuilder()
+    builder.button(text=f"🎁 Check Out {name}", url=normalized)
+    return builder.as_markup()
+
+
+def sponsor_teaser(name: str, description: str = "") -> str:
+    """Return the HTML teaser text shown above the sponsor button.
+
+    Displays the sponsor's name prominently and, when *description* is
+    provided, shows it as an italic subtitle so users know what the sponsor
+    offers.  Falls back to a generic warm CTA when *description* is blank.
+    """
+    safe_name = _escape_html(name)
+    if description:
+        subtitle = _escape_html(description)
+    else:
+        subtitle = "They help keep this bot free — worth a look! 👇"
+    return f"🤝 <b>Sponsored by {safe_name}</b>\n<i>{subtitle}</i>"
 

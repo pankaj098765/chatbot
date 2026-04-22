@@ -101,9 +101,9 @@ class Settings:
     llm_base_url: str = ""
 
     # Sponsor branding — shown as a subtle line on every disconnect message.
-    # Set SPONSOR_NAME (optionally with a description after a | separator) and
+    # Set SPONSOR_NAME (optionally with a description after a , separator) and
     # SPONSOR_LINK in .env; leave either empty to disable the sponsor block.
-    # e.g.  SPONSOR_NAME=AcmeCo|The fastest VPN on the planet
+    # e.g.  SPONSOR_NAME=AcmeCo,The fastest VPN on the planet
     sponsor_name: str = ""
     sponsor_link: str = ""
     sponsor_description: str = ""
@@ -220,11 +220,11 @@ def _get_settings() -> Settings:
         llm_base_url=get_env("LLM_BASE_URL", ""),
         sponsor_link=get_env("SPONSOR_LINK", ""),
     )
-    # Parse optional description from SPONSOR_NAME using | separator.
-    # e.g. SPONSOR_NAME=AcmeCo|The fastest VPN on the planet
+    # Parse optional description from SPONSOR_NAME using , separator.
+    # e.g. SPONSOR_NAME=AcmeCo,The fastest VPN on the planet
     raw_sponsor = get_env("SPONSOR_NAME", "")
-    if "|" in raw_sponsor:
-        _sname, _sdesc = raw_sponsor.split("|", 1)
+    if "," in raw_sponsor:
+        _sname, _sdesc = raw_sponsor.split(",", 1)
         cfg.sponsor_name = _sname.strip()
         cfg.sponsor_description = _sdesc.strip()
     else:

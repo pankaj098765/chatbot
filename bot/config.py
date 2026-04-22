@@ -105,6 +105,7 @@ class Settings:
     # disable the sponsor line without touching any other code.
     sponsor_name: str = ""
     sponsor_link: str = ""
+    sponsor_description: str = ""
 
 
 # ─── Key-format fingerprints ─────────────────────────────────────────────────
@@ -218,6 +219,7 @@ def _get_settings() -> Settings:
         llm_base_url=get_env("LLM_BASE_URL", ""),
         sponsor_name=get_env("SPONSOR_NAME", ""),
         sponsor_link=get_env("SPONSOR_LINK", ""),
+        sponsor_description=get_env("SPONSOR_DESCRIPTION", ""),
     )
 
 

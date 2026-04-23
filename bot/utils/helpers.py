@@ -142,17 +142,31 @@ def sponsor_button(name: str, link: str) -> InlineKeyboardMarkup | None:
     return builder.as_markup()
 
 
-def sponsor_teaser(name: str, description: str = "") -> str:
+def sponsor_teaser(name: str, description: str = "", link: str = "") -> str:
     """Return the HTML teaser text shown above the sponsor button.
 
-    Displays the sponsor's name prominently and, when *description* is
-    provided, shows it as an italic subtitle so users know what the sponsor
-    offers.  Falls back to a generic warm CTA when *description* is blank.
+    Renders a compact two-line layout:
+      🤝 Sponsored by   <sponsorname>
+                        <description>
+
+    The sponsor name sits on the same line as the "Sponsored by" header.
+    The description is indented on the next line to align under the name.
+    If *link* is a valid URL the sponsor name is rendered as a clickable link.
     """
     safe_name = _escape_html(name)
-    if description:
-        subtitle = _escape_html(description)
-    else:
-        subtitle = "They help keep this bot free — worth a look! 👇"
-    return f"🤝 <b>Sponsored by {safe_name}</b>\n<i>{subtitle}</i>"
+    normalized_link = _normalize_sponsor_link(link) if link else None
+    subtitle = _escape_html(description) if description else "They help keep this bot free — worth a look! 👇"
 
+    if normalized_link:
+        name_html = f"<a href=\"{normalized_link}\"><b>{safe_name}</b></a>"
+    else:
+        name_html = f"<b>{safe_name}</b>"
+
+    # Non-breaking spaces used for indentation so Telegram preserves them.
+    # Width of "🤝 Sponsored by   " ≈ 18 characters; use matching NBSP indent.
+    indent = "\u00a0" * 18
+
+    return (
+        f"🤝 <b>Sponsored by</b>   {name_html}\n"
+        f"{indent}<i>{subtitle}</i>"
+    )

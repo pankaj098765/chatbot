@@ -215,10 +215,14 @@ def _get_settings() -> Settings:
                 part.strip() for part in sponsor_name.split(",", 1)
             )
         # Also accept "Name - Description" for easier plain-text entry.
+        # To avoid splitting legitimate dashed names, only split when the
+        # right side looks like a phrase (contains at least one space).
         elif " - " in sponsor_name:
-            sponsor_name, sponsor_description = (
+            left, right = (
                 part.strip() for part in sponsor_name.split(" - ", 1)
             )
+            if left and right and " " in right:
+                sponsor_name, sponsor_description = left, right
 
     cfg = Settings(
         bot_token=token,

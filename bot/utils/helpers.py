@@ -12,7 +12,8 @@ from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 logger = logging.getLogger(__name__)
 
-SPONSOR_TEASER_PREFIX = "📣 Sponsored by ~\u00a0\u00a0\u00a0\u00a0\u00a0"
+SPONSOR_TEASER_NAME_GAP = 5
+SPONSOR_TEASER_PREFIX = "📣 Sponsored by ~" + ("\u00a0" * SPONSOR_TEASER_NAME_GAP)
 # Keep divider width visually balanced with the sponsor header on Telegram.
 SPONSOR_TEASER_DIVIDER = "━" * 22
 # Keep subtitle start aligned under the sponsor name start.

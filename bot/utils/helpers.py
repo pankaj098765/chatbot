@@ -145,29 +145,28 @@ def sponsor_button(name: str, link: str) -> InlineKeyboardMarkup | None:
 def sponsor_teaser(name: str, description: str = "", link: str = "") -> str:
     """Return the HTML teaser text shown above the sponsor button.
 
-    Uses a premium, multi-line layout that visually separates:
-    - the "Sponsored by" label,
-    - sponsor name, and
-    - sponsor description.
+    Renders a compact two-line layout:
+      🤝 Sponsored by   <sponsorname>
+                        <description>
 
-    If *link* is a valid URL, the sponsor name is rendered as a clickable link
-    (Telegram usually styles links with an accent color).  Description is shown
-    in a blockquote+italic style for additional visual separation.
+    The sponsor name sits on the same line as the "Sponsored by" header.
+    The description is indented on the next line to align under the name.
+    If *link* is a valid URL the sponsor name is rendered as a clickable link.
     """
     safe_name = _escape_html(name)
     normalized_link = _normalize_sponsor_link(link) if link else None
-    if description:
-        subtitle = _escape_html(description)
-    else:
-        subtitle = "They help keep this bot free — worth a look! 👇"
+    subtitle = _escape_html(description) if description else "They help keep this bot free — worth a look! 👇"
 
     if normalized_link:
-        sponsor_name_line = f"💠 <a href=\"{normalized_link}\"><b>{safe_name}</b></a>"
+        name_html = f"<a href=\"{normalized_link}\"><b>{safe_name}</b></a>"
     else:
-        sponsor_name_line = f"💠 <b>{safe_name}</b>"
+        name_html = f"<b>{safe_name}</b>"
+
+    # Non-breaking spaces used for indentation so Telegram preserves them.
+    # Width of "🤝 Sponsored by   " ≈ 18 characters; use matching NBSP indent.
+    indent = "\u00a0" * 18
 
     return (
-        "🤝 <b>Sponsored by</b>\n"
-        f"{sponsor_name_line}\n"
-        f"<blockquote><i>{subtitle}</i></blockquote>"
+        f"🤝 <b>Sponsored by</b>   {name_html}\n"
+        f"{indent}<i>{subtitle}</i>"
     )

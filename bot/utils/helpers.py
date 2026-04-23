@@ -12,11 +12,11 @@ from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 logger = logging.getLogger(__name__)
 
-SPONSOR_TEASER_PREFIX = "📣 Sponsored by ~ "
+SPONSOR_TEASER_PREFIX = "📣 Sponsored by ~\u00a0\u00a0\u00a0\u00a0\u00a0"
 # Keep divider width visually balanced with the sponsor header on Telegram.
 SPONSOR_TEASER_DIVIDER = "━" * 22
-# Calibrated indentation for Telegram visual alignment under sponsor name.
-SPONSOR_TEASER_INDENT = 18
+# Keep subtitle start aligned under the sponsor name start.
+SPONSOR_TEASER_INDENT = len(SPONSOR_TEASER_PREFIX)
 
 
 def generate_session_id() -> str:

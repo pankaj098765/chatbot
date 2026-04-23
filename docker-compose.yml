@@ -34,6 +34,7 @@ services:
       - AI_ENABLED
       - PAYMENT_ENABLED
       - SPONSOR_NAME
+      - SPONSOR_DESCRIPTION
       - SPONSOR_LINK
       - DEBUG
     depends_on:

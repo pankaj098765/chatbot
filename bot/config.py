@@ -101,9 +101,9 @@ class Settings:
     llm_base_url: str = ""
 
     # Sponsor branding — shown as a subtle line on every disconnect message.
-    # Set SPONSOR_NAME (optionally with a description after a , separator) and
-    # SPONSOR_LINK in .env; leave either empty to disable the sponsor block.
-    # e.g.  SPONSOR_NAME=AcmeCo,The fastest VPN on the planet
+    # Set SPONSOR_NAME + SPONSOR_DESCRIPTION + SPONSOR_LINK in .env; leave
+    # name/link empty to disable the sponsor block.
+    # e.g. SPONSOR_NAME=AcmeCo / SPONSOR_DESCRIPTION=The fastest VPN on the planet
     sponsor_name: str = ""
     sponsor_link: str = ""
     sponsor_description: str = ""
@@ -206,16 +206,23 @@ def _resolve_llm_provider_and_key() -> tuple[str, str]:
 def _get_settings() -> Settings:
     token = get_env("BOT_TOKEN", required=True)
     llm_provider, llm_api_key = _resolve_llm_provider_and_key()
-    # Parse optional description from SPONSOR_NAME using , separator.
-    # e.g. SPONSOR_NAME=AcmeCo,The fastest VPN on the planet
-    raw_sponsor = get_env("SPONSOR_NAME", "")
-    if "," in raw_sponsor:
-        sponsor_name, sponsor_description = (
-            part.strip() for part in raw_sponsor.split(",", 1)
-        )
-    else:
-        sponsor_name = raw_sponsor.strip()
-        sponsor_description = ""
+    sponsor_name = get_env("SPONSOR_NAME", "").strip()
+    sponsor_description = get_env("SPONSOR_DESCRIPTION", "").strip()
+    # Backward compatibility: allow legacy combined format in SPONSOR_NAME.
+    if not sponsor_description:
+        if "," in sponsor_name:
+            sponsor_name, sponsor_description = (
+                part.strip() for part in sponsor_name.split(",", 1)
+            )
+        # Also accept "Name - Description" for easier plain-text entry.
+        # To avoid splitting legitimate dashed names, only split when the
+        # right side looks like a phrase (contains at least one space).
+        elif " - " in sponsor_name:
+            left, right = (
+                part.strip() for part in sponsor_name.split(" - ", 1)
+            )
+            if left and right and " " in right:
+                sponsor_name, sponsor_description = left, right
 
     cfg = Settings(
         bot_token=token,

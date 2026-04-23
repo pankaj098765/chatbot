@@ -145,12 +145,13 @@ def sponsor_button(name: str, link: str) -> InlineKeyboardMarkup | None:
 def sponsor_teaser(name: str, description: str = "", link: str = "") -> str:
     """Return the HTML teaser text shown above the sponsor button.
 
-    Renders a compact two-line layout:
-      🤝 Sponsored by   <sponsorname>
-                        <description>
+    Renders a premium multi-line layout:
+      ━━━━━━━━━━━━━━━━━━━━━━
+      📣 Sponsored by ~ <sponsorname> 🔥
+                     <description>
+      ━━━━━━━━━━━━━━━━━━━━━━
 
-    The sponsor name sits on the same line as the "Sponsored by" header.
-    The description is indented on the next line to align under the name.
+    The description line is indented to align under the sponsor name.
     If *link* is a valid URL the sponsor name is rendered as a clickable link.
     """
     safe_name = _escape_html(name)
@@ -163,10 +164,14 @@ def sponsor_teaser(name: str, description: str = "", link: str = "") -> str:
         name_html = f"<b>{safe_name}</b>"
 
     # Non-breaking spaces used for indentation so Telegram preserves them.
-    # Width of "🤝 Sponsored by   " ≈ 18 characters; use matching NBSP indent.
-    indent = "\u00a0" * 18
+    # Keep subtitle aligned to where sponsor name starts in header.
+    sponsor_prefix = "📣 Sponsored by ~ "
+    indent = "\u00a0" * len(sponsor_prefix)
+    divider = "━━━━━━━━━━━━━━━━━━━━━━"
 
     return (
-        f"🤝 <b>Sponsored by</b>   {name_html}\n"
-        f"{indent}<i>{subtitle}</i>"
+        f"{divider}\n"
+        f"{sponsor_prefix}{name_html} 🔥\n"
+        f"{indent}<i>{subtitle}</i>\n"
+        f"{divider}"
     )

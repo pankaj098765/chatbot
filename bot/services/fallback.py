@@ -409,7 +409,9 @@ async def start_fallback_session(bot: Bot, user_id: int, storage: BaseStorage) -
         if btn:
             await bot.send_message(
                 user_id,
-                sponsor_teaser(settings.sponsor_name, settings.sponsor_description),
+                sponsor_teaser(
+                    settings.sponsor_name, settings.sponsor_description, settings.sponsor_link
+                ),
                 reply_markup=btn,
                 parse_mode="HTML",
             )

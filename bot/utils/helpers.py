@@ -142,17 +142,32 @@ def sponsor_button(name: str, link: str) -> InlineKeyboardMarkup | None:
     return builder.as_markup()
 
 
-def sponsor_teaser(name: str, description: str = "") -> str:
+def sponsor_teaser(name: str, description: str = "", link: str = "") -> str:
     """Return the HTML teaser text shown above the sponsor button.
 
-    Displays the sponsor's name prominently and, when *description* is
-    provided, shows it as an italic subtitle so users know what the sponsor
-    offers.  Falls back to a generic warm CTA when *description* is blank.
+    Uses a premium, multi-line layout that visually separates:
+    - the "Sponsored by" label,
+    - sponsor name, and
+    - sponsor description.
+
+    If *link* is a valid URL, the sponsor name is rendered as a clickable link
+    (Telegram usually styles links with an accent color).  Description is shown
+    in a blockquote+italic style for additional visual separation.
     """
     safe_name = _escape_html(name)
+    normalized_link = _normalize_sponsor_link(link) if link else None
     if description:
         subtitle = _escape_html(description)
     else:
         subtitle = "They help keep this bot free — worth a look! 👇"
-    return f"🤝 <b>Sponsored by {safe_name}</b>\n<i>{subtitle}</i>"
 
+    if normalized_link:
+        sponsor_name_line = f"💠 <a href=\"{normalized_link}\"><b>{safe_name}</b></a>"
+    else:
+        sponsor_name_line = f"💠 <b>{safe_name}</b>"
+
+    return (
+        "🤝 <b>Sponsored by</b>\n"
+        f"{sponsor_name_line}\n"
+        f"<blockquote><i>{subtitle}</i></blockquote>"
+    )

@@ -253,7 +253,9 @@ async def _do_next(message: Message, state: FSMContext, bot: Bot, user_id: int |
     btn = sponsor_button(settings.sponsor_name, settings.sponsor_link)
     if btn:
         await message.answer(
-            sponsor_teaser(settings.sponsor_name, settings.sponsor_description),
+            sponsor_teaser(
+                settings.sponsor_name, settings.sponsor_description, settings.sponsor_link
+            ),
             reply_markup=btn,
             parse_mode="HTML",
         )
@@ -272,7 +274,9 @@ async def _do_next(message: Message, state: FSMContext, bot: Bot, user_id: int |
             if btn:
                 await bot.send_message(
                     partner_id,
-                    sponsor_teaser(settings.sponsor_name, settings.sponsor_description),
+                    sponsor_teaser(
+                        settings.sponsor_name, settings.sponsor_description, settings.sponsor_link
+                    ),
                     reply_markup=btn,
                     parse_mode="HTML",
                 )
@@ -322,7 +326,9 @@ async def _do_stop(message: Message, state: FSMContext, bot: Bot, user_id: int |
     btn = sponsor_button(settings.sponsor_name, settings.sponsor_link)
     if btn:
         await message.answer(
-            sponsor_teaser(settings.sponsor_name, settings.sponsor_description),
+            sponsor_teaser(
+                settings.sponsor_name, settings.sponsor_description, settings.sponsor_link
+            ),
             reply_markup=btn,
             parse_mode="HTML",
         )
@@ -341,7 +347,9 @@ async def _do_stop(message: Message, state: FSMContext, bot: Bot, user_id: int |
             if btn:
                 await bot.send_message(
                     partner_id,
-                    sponsor_teaser(settings.sponsor_name, settings.sponsor_description),
+                    sponsor_teaser(
+                        settings.sponsor_name, settings.sponsor_description, settings.sponsor_link
+                    ),
                     reply_markup=btn,
                     parse_mode="HTML",
                 )

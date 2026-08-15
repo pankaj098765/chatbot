@@ -278,7 +278,7 @@ async def start_fallback_session(bot: Bot, user_id: int, storage: BaseStorage) -
 
     # Wait 35–60 seconds (random) before sending the opening greeting so the
     # chat feels natural and not like an instant bot response.
-    await asyncio.sleep(random.uniform(35.0, 60.0))
+    await asyncio.sleep(random.uniform(15.0, 35.0))
 
     # Check the session is still active before the greeting (user may have
     # pressed /stop or /next while we were waiting).  Compare by session_id
